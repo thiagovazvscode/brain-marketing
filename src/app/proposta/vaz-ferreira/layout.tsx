@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     siteName: "Brain Marketing & Performance",
     images: [
       {
-        url: "https://brainmktp.com.br/images/logo.png",
+        url: "https://brainmktp.com.br/favicon.png",
         width: 1200,
         height: 630,
         alt: "Brain Marketing & Performance",
