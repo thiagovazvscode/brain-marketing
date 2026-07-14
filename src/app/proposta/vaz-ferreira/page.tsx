@@ -19,7 +19,7 @@ import { InstagramIcon } from "@/components/ui/SocialIcons";
 
 const whatsappMessage =
   "Olá Thiago, quero conversar sobre a proposta para Vaz Ferreira Advogados";
-const whatsappLink = `https://wa.me/5500000000000?text=${encodeURIComponent(whatsappMessage)}`;
+const whatsappLink = `https://wa.me/5591985855801?text=${encodeURIComponent(whatsappMessage)}`;
 
 const badgeClass =
   "inline-flex items-center gap-2 rounded-full border border-brand-magenta/30 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-brand-magenta";

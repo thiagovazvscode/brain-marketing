@@ -11,8 +11,8 @@ export const siteConfig = {
   locale: "pt_BR",
 
   // Contato — substitua pelos dados reais
-  whatsapp: "5500000000000", // formato internacional, apenas números
-  whatsappDisplay: "(00) 00000-0000",
+  whatsapp: "5591985855801", // formato internacional, apenas números
+  whatsappDisplay: "(91) 98585-5801",
   email: "SEU_EMAIL_AQUI@brainmkt.com.br",
   city: "SUA_CIDADE_AQUI, UF",
 
