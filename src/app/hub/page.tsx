@@ -6,66 +6,50 @@ function wa(msg: string) {
   return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`;
 }
 
-const LINKS = [
+const BANNERS = [
   {
-    icon: "📈",
-    tag: "Tráfego Pago",
-    title: "Incorporadoras",
-    desc: "Meta Ads e Google Ads para lançamentos imobiliários",
-    gradient: "from-violet-600/30 to-fuchsia-600/20",
-    border: "border-violet-500/30",
-    tagColor: "text-violet-400",
-    msg: "Olá! Tenho interesse em tráfego pago para minha incorporadora. Quero saber mais sobre os serviços da Brain Marketing.",
+    src: "/images/hub/banner-incorporadoras.png",
+    alt: "Tráfego Pago para Incorporadoras e Lançamentos Imobiliários — Brain Marketing",
+    href: wa("Olá! Tenho interesse em tráfego pago para minha incorporadora. Quero saber mais sobre os serviços da Brain Marketing."),
   },
   {
-    icon: "🏢",
-    tag: "Tráfego Pago",
-    title: "Imobiliárias",
-    desc: "Geração de leads qualificados para equipes de corretores",
-    gradient: "from-fuchsia-600/30 to-pink-600/20",
-    border: "border-fuchsia-500/30",
-    tagColor: "text-fuchsia-400",
-    msg: "Olá! Tenho interesse em tráfego pago para minha imobiliária. Quero saber mais sobre os serviços da Brain Marketing.",
+    src: "/images/hub/banner-imobiliarias.png",
+    alt: "Tráfego Pago para Imobiliárias que querem gerar mais demanda — Brain Marketing",
+    href: wa("Olá! Tenho interesse em tráfego pago para minha imobiliária. Quero saber mais sobre os serviços da Brain Marketing."),
   },
   {
-    icon: "🔑",
-    tag: "Tráfego Pago",
-    title: "Corretores Autônomos",
-    desc: "Anúncios no Meta Ads para corretores que vendem mais",
-    gradient: "from-pink-600/30 to-rose-600/20",
-    border: "border-pink-500/30",
-    tagColor: "text-pink-400",
-    msg: "Olá! Sou corretor autônomo e tenho interesse em tráfego pago. Quero saber mais sobre os serviços da Brain Marketing.",
+    src: "/images/hub/banner-corretores.png",
+    alt: "Tráfego Pago para Corretores Autônomos — Brain Marketing",
+    href: wa("Olá! Sou corretor autônomo e tenho interesse em tráfego pago. Quero saber mais sobre os serviços da Brain Marketing."),
   },
   {
-    icon: "🎬",
-    tag: "Audiovisual",
-    title: "Drone & Câmera Profissional",
-    desc: "Filmagens aéreas e vídeos comerciais para seus empreendimentos",
-    gradient: "from-sky-600/30 to-violet-600/20",
-    border: "border-sky-500/30",
-    tagColor: "text-sky-400",
-    msg: "Olá! Tenho interesse nos serviços de audiovisual (drone e câmera profissional) da Brain Marketing. Quero saber mais.",
+    src: "/images/hub/banner-empresas.png",
+    alt: "Tráfego Pago para Empresas — Brain Marketing",
+    href: wa("Olá! Tenho interesse em tráfego pago para minha empresa. Quero saber mais sobre os serviços da Brain Marketing."),
   },
   {
-    icon: "🩺",
-    tag: "Gratuito",
-    title: "Diagnóstico Comercial",
-    desc: "Analisamos sua operação de marketing e apontamos os gargalos",
-    gradient: "from-emerald-600/30 to-teal-600/20",
-    border: "border-emerald-500/30",
-    tagColor: "text-emerald-400",
-    msg: "Olá! Quero agendar um diagnóstico comercial gratuito com a Brain Marketing.",
+    src: "/images/hub/banner-audiovisual.png",
+    alt: "Audiovisual Imobiliário — Drone, Câmera e Edição Profissional — Brain Marketing",
+    href: wa("Olá! Tenho interesse nos serviços de audiovisual (drone e câmera profissional) da Brain Marketing. Quero saber mais."),
+  },
+  {
+    src: "/images/hub/banner-brokerapps.png",
+    alt: "BrokerApps — Do Lead à Venda, Tudo em Uma Única Plataforma",
+    href: "https://brokerapps.com.br",
+  },
+  {
+    src: "/images/hub/banner-diagnostico.png",
+    alt: "Diagnóstico Comercial — Identifique os gargalos que estão travando suas vendas — Brain Marketing",
+    href: wa("Olá! Quero agendar um diagnóstico comercial com a Brain Marketing."),
   },
 ];
 
 export default function HubPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center px-4 py-12">
+    <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center px-4 py-12">
 
       {/* ── Profile ── */}
       <div className="mb-10 flex flex-col items-center text-center">
-        {/* Avatar com anel gradiente */}
         <div className="relative mb-5">
           <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 blur-sm opacity-70" />
           <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-white/10">
@@ -79,7 +63,6 @@ export default function HubPage() {
           </div>
         </div>
 
-        {/* Logo + nome */}
         <div className="mb-1 flex items-center gap-2">
           <Image src="/images/logo.png" alt="Brain" width={28} height={28} className="rounded-md" />
           <span className="text-sm font-black uppercase tracking-widest text-white/60">Brain Marketing</span>
@@ -97,38 +80,22 @@ export default function HubPage() {
 
       {/* ── Banners ── */}
       <div className="w-full space-y-3">
-        {LINKS.map((link) => (
+        {BANNERS.map((banner) => (
           <a
-            key={link.title}
-            href={wa(link.msg)}
+            key={banner.src}
+            href={banner.href}
             target="_blank"
             rel="noopener noreferrer"
-            className={`group flex items-center gap-4 rounded-2xl border bg-gradient-to-r ${link.gradient} ${link.border} px-5 py-4 backdrop-blur-sm transition-all duration-200 hover:scale-[1.02] hover:brightness-110 active:scale-[0.99]`}
+            className="group block w-full overflow-hidden rounded-2xl transition-all duration-200 hover:scale-[1.02] hover:brightness-105 active:scale-[0.99] active:brightness-95"
           >
-            {/* Ícone */}
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 text-2xl">
-              {link.icon}
-            </div>
-
-            {/* Texto */}
-            <div className="flex-1 min-w-0">
-              <p className={`text-[10px] font-black uppercase tracking-widest ${link.tagColor}`}>
-                {link.tag}
-              </p>
-              <p className="text-base font-black text-white">{link.title}</p>
-              <p className="mt-0.5 truncate text-xs text-white/50">{link.desc}</p>
-            </div>
-
-            {/* Seta */}
-            <svg
-              className="h-5 w-5 shrink-0 text-white/30 transition group-hover:text-white/70 group-hover:translate-x-0.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
+            <Image
+              src={banner.src}
+              alt={banner.alt}
+              width={1200}
+              height={628}
+              className="w-full h-auto"
+              sizes="(max-width: 512px) 100vw, 512px"
+            />
           </a>
         ))}
       </div>
@@ -146,7 +113,6 @@ export default function HubPage() {
         Falar direto no WhatsApp
       </a>
 
-      {/* ── Footer ── */}
       <p className="mt-10 text-center text-[10px] text-white/20">
         © 2026 Brain Marketing & Performance · brainmktp.com.br
       </p>
