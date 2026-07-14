@@ -1,106 +1,65 @@
 "use client";
 
-import { ArrowRight, Check, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Check, Target } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GlowCard } from "@/components/ui/GlowCard";
 import { Logo } from "@/components/ui/Logo";
 import { MotionReveal } from "@/components/ui/MotionReveal";
+import { InstagramIcon } from "@/components/ui/SocialIcons";
 
 const whatsappMessage =
-  "Olá Thiago, aceito a proposta da Brain para Vaz Ferreira Advogados";
+  "Olá Thiago, quero conversar sobre a proposta para Vaz Ferreira Advogados";
 const whatsappLink = `https://wa.me/5500000000000?text=${encodeURIComponent(whatsappMessage)}`;
 
 const badgeClass =
-  "inline-flex items-center gap-2 rounded-full border border-brand-magenta/40 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-brand-magenta";
+  "inline-flex items-center gap-2 rounded-full border border-brand-magenta/30 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-brand-magenta";
 
-const heroPills = ["Tráfego Pago", "Posicionamento"];
-
-const contextCards = [
-  "82% dos clientes pesquisam o advogado online antes de contatar",
-  "Autoridade digital reduz o ciclo de vendas em até 40%",
-  "Tráfego pago para jurídico gera leads 3x mais qualificados que redes orgânicas",
-];
+const heroPills = ["Tráfego Pago", "Posicionamento Digital"];
 
 const paidTrafficDeliverables = [
-  "Gestão completa de Meta Ads (Instagram + Facebook)",
-  "Até 3 campanhas simultâneas ativas",
-  "Segmentação por localização, perfil e comportamento",
-  "Criativos para anúncios (artes + textos)",
-  "Relatório mensal de performance com métricas reais",
-  "Otimização contínua quinzenal",
+  "Gestão completa das campanhas",
+  "Até 3 campanhas simultâneas",
+  "Segmentação por localização e perfil",
+  "Criação de artes e textos para anúncios",
+  "Relatório mensal com métricas reais",
+  "Otimizações contínuas",
 ];
 
 const positioningDeliverables = [
-  "12 posts no feed por mês (carrosséis jurídicos + institucionais)",
-  "6 reels editados por mês (cliente envia o bruto, a Brain edita e entrega)",
-  "Legendas estratégicas otimizadas por publicação",
-  "Hashtags e horários definidos por dados",
-  "Calendário editorial mensal aprovado antes de publicar",
-  "1 reunião mensal de alinhamento estratégico (30 min)",
-];
-
-const timeline = [
-  {
-    phase: "Fase 1",
-    title: "Diagnóstico & Estrutura",
-    desc: "Onboarding, briefing, identidade de conteúdo, configuração de anúncios.",
-  },
-  {
-    phase: "Fase 2",
-    title: "Ativação",
-    desc: "Primeiras campanhas no ar, primeiros conteúdos publicados.",
-  },
-  {
-    phase: "Fase 3",
-    title: "Otimização",
-    desc: "Análise dos dados iniciais, ajuste de segmentação e conteúdo.",
-  },
-  {
-    phase: "Fase 4",
-    title: "Escala",
-    desc: "Ampliar o que funciona, novos formatos de conteúdo.",
-  },
-  {
-    phase: "Fase 5",
-    title: "Consolidação",
-    desc: "Autoridade crescendo, leads mais qualificados.",
-  },
-  {
-    phase: "Fase 6",
-    title: "Resultado & Renovação",
-    desc: "Relatório completo, proposta de continuidade.",
-  },
+  "12 posts no feed por mês",
+  "6 reels editados por mês (você envia o bruto, a Brain edita)",
+  "Legendas estratégicas em cada publicação",
+  "Calendário editorial aprovado antes de publicar",
+  "Reunião mensal de alinhamento (30 min)",
 ];
 
 const included = [
   "Gestão completa de Meta Ads",
-  "Criação de 12 posts/mês",
-  "Edição de 6 reels/mês",
-  "Relatórios mensais",
+  "12 posts no feed/mês",
+  "6 reels editados/mês",
+  "Relatório mensal de performance",
   "Reunião mensal de alinhamento",
-  "Suporte via WhatsApp (dias úteis)",
+  "Suporte via WhatsApp em dias úteis",
 ];
 
 const notIncluded = [
-  "Verba de anúncios (recomendamos R$500-800/mês)",
-  "Produção de vídeo (cliente fornece o material bruto)",
+  "Verba de anúncios (recomendamos R$500–800/mês separado)",
+  "Produção de vídeo (cliente envia o material bruto)",
 ];
 
 export default function PropostaVazFerreiraPage() {
   return (
     <>
-      {/* SEÇÃO 1 — HEADER DA PROPOSTA */}
+      {/* SEÇÃO 1 — HEADER */}
       <header className="relative">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6 lg:px-10">
           <Logo width={140} height={42} priority />
-          <span className={badgeClass}>
-            Proposta Comercial · Confidencial
-          </span>
+          <span className={badgeClass}>Proposta Comercial · Confidencial</span>
         </div>
         <div className="h-px w-full bg-gradient-to-r from-brand-primary via-brand-magenta to-transparent" />
       </header>
 
-      {/* SEÇÃO 2 — HERO DA PROPOSTA */}
+      {/* SEÇÃO 2 — HERO */}
       <section className="relative overflow-hidden px-6 pb-20 pt-16 lg:px-10 lg:pt-24">
         <div
           aria-hidden="true"
@@ -122,7 +81,7 @@ export default function PropostaVazFerreiraPage() {
           <MotionReveal delay={0.08}>
             <h1 className="mt-6 text-balance font-display text-4xl font-bold leading-[1.05] text-white sm:text-5xl md:text-6xl">
               Vaz Ferreira{" "}
-              <span className="bg-gradient-to-r from-violet-500 via-fuchsia-400 to-pink-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-violet-500 to-pink-500 bg-clip-text text-transparent">
                 Advogados
               </span>
             </h1>
@@ -130,8 +89,8 @@ export default function PropostaVazFerreiraPage() {
 
           <MotionReveal delay={0.16}>
             <p className="mx-auto mt-6 max-w-2xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
-              Proposta de parceria estratégica em marketing digital —
-              tráfego pago e posicionamento de autoridade.
+              Uma estrutura de marketing digital pensada para gerar autoridade e
+              atrair clientes qualificados para o escritório.
             </p>
           </MotionReveal>
 
@@ -146,53 +105,15 @@ export default function PropostaVazFerreiraPage() {
               ))}
             </ul>
           </MotionReveal>
-
-          <MotionReveal delay={0.32}>
-            <p className="mt-10 text-xs text-gray-500">Julho de 2026</p>
-          </MotionReveal>
         </div>
       </section>
 
-      {/* SEÇÃO 3 — DIAGNÓSTICO / CONTEXTO */}
+      {/* SEÇÃO 3 — O QUE SERÁ ENTREGUE */}
       <section className="px-6 py-20 lg:px-10">
         <div className="mx-auto max-w-5xl">
           <MotionReveal>
             <h2 className="font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
-              Por que agora é o momento certo?
-            </h2>
-          </MotionReveal>
-
-          <MotionReveal delay={0.08}>
-            <p className="mt-5 max-w-3xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
-              O mercado jurídico está passando por uma transformação digital
-              acelerada. Escritórios que investem em posicionamento de
-              autoridade e captação ativa hoje saem na frente — enquanto a
-              concorrência ainda depende de indicação. A Brain foi
-              estruturada para resolver exatamente isso: transformar
-              presença digital em demanda real e mensurável.
-            </p>
-          </MotionReveal>
-
-          <div className="mt-12 grid gap-5 sm:grid-cols-3">
-            {contextCards.map((text, index) => (
-              <MotionReveal key={text} delay={0.12 + index * 0.08}>
-                <div className="h-full rounded-2xl border border-brand-primary/10 bg-white/[0.03] p-6">
-                  <p className="text-sm leading-relaxed text-gray-300">
-                    {text}
-                  </p>
-                </div>
-              </MotionReveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SEÇÃO 4 — SERVIÇOS INCLUÍDOS */}
-      <section className="px-6 py-20 lg:px-10">
-        <div className="mx-auto max-w-5xl">
-          <MotionReveal>
-            <h2 className="font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
-              Serviços incluídos
+              O que será entregue
             </h2>
           </MotionReveal>
 
@@ -202,13 +123,15 @@ export default function PropostaVazFerreiraPage() {
                 className="h-full border-brand-primary/30 p-8"
                 glowColor="rgba(124,58,237,0.18)"
               >
-                <h3 className="font-display text-2xl font-semibold text-white">
-                  Tráfego Pago — Meta Ads
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-primary/30 text-brand-primary">
+                  <Target className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-5 font-display text-2xl font-semibold text-white">
+                  Gestão de Tráfego Pago
                 </h3>
                 <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                  Campanhas no Instagram e Facebook com segmentação local e
-                  por interesse jurídico, conectadas diretamente ao WhatsApp
-                  do escritório.
+                  Campanhas no Meta Ads (Instagram e Facebook) segmentadas para
+                  o perfil de cliente do escritório, conectadas ao WhatsApp.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {paidTrafficDeliverables.map((item) => (
@@ -224,9 +147,8 @@ export default function PropostaVazFerreiraPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-6 rounded-xl border border-brand-primary/20 bg-brand-primary/5 px-4 py-3 text-xs leading-relaxed text-gray-400">
-                  ⚠️ Verba de anúncios não inclusa — recomendamos R$500 a
-                  R$800/mês de investimento em mídia separado.
+                <p className="mt-6 text-xs leading-relaxed text-gray-500">
+                  A verba de anúncios não está inclusa no valor da gestão.
                 </p>
               </GlowCard>
             </MotionReveal>
@@ -236,13 +158,15 @@ export default function PropostaVazFerreiraPage() {
                 className="h-full border-brand-magenta/30 p-8"
                 glowColor="rgba(217,70,239,0.18)"
               >
-                <h3 className="font-display text-2xl font-semibold text-white">
-                  Posicionamento de Autoridade — Social Media
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-magenta/30 text-brand-magenta">
+                  <InstagramIcon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-5 font-display text-2xl font-semibold text-white">
+                  Posicionamento no Instagram
                 </h3>
                 <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                  Construção de presença digital consistente no Instagram
-                  com conteúdo jurídico educativo e institucional que gera
-                  autoridade e atrai o cliente certo.
+                  Conteúdo jurídico estratégico que constrói autoridade e
+                  mantém o escritório presente na mente do cliente certo.
                 </p>
                 <ul className="mt-6 space-y-3">
                   {positioningDeliverables.map((item) => (
@@ -264,45 +188,7 @@ export default function PropostaVazFerreiraPage() {
         </div>
       </section>
 
-      {/* SEÇÃO 5 — COMO TRABALHAMOS JUNTOS */}
-      <section className="px-6 py-20 lg:px-10">
-        <div className="mx-auto max-w-6xl">
-          <MotionReveal>
-            <h2 className="font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
-              Como trabalhamos juntos
-            </h2>
-          </MotionReveal>
-
-          <div className="relative mt-14">
-            <div
-              aria-hidden="true"
-              className="absolute left-0 right-0 top-5 hidden h-px bg-gradient-to-r from-brand-primary via-brand-magenta to-brand-pink lg:block"
-            />
-            <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-6 lg:gap-4">
-              {timeline.map((step, index) => (
-                <MotionReveal key={step.phase} delay={index * 0.08}>
-                  <div className="relative flex flex-col items-start lg:items-center lg:text-center">
-                    <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#0f0a1e] text-xs font-semibold text-brand-magenta">
-                      {index + 1}
-                    </span>
-                    <span className="mt-4 text-[11px] font-medium uppercase tracking-[0.14em] text-brand-magenta">
-                      {step.phase}
-                    </span>
-                    <h3 className="mt-1 font-display text-base font-semibold text-white">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-gray-400">
-                      {step.desc}
-                    </p>
-                  </div>
-                </MotionReveal>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SEÇÃO 6 — INVESTIMENTO */}
+      {/* SEÇÃO 4 — INVESTIMENTO */}
       <section className="relative overflow-hidden px-6 py-24 lg:px-10">
         <div
           aria-hidden="true"
@@ -332,7 +218,7 @@ export default function PropostaVazFerreiraPage() {
             <MotionReveal delay={0.16} direction="left">
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-primary">
-                  O que está incluído
+                  O que está incluso
                 </h3>
                 <ul className="mt-4 space-y-3">
                   {included.map((item) => (
@@ -375,7 +261,7 @@ export default function PropostaVazFerreiraPage() {
         </div>
       </section>
 
-      {/* SEÇÃO 7 — CTA FINAL */}
+      {/* SEÇÃO 5 — CTA FINAL */}
       <section className="relative overflow-hidden px-6 py-28 text-center lg:px-10">
         <div
           aria-hidden="true"
@@ -385,44 +271,27 @@ export default function PropostaVazFerreiraPage() {
         <div className="relative mx-auto max-w-2xl">
           <MotionReveal>
             <h2 className="text-balance font-display text-3xl font-medium leading-[1.1] text-white sm:text-4xl md:text-5xl">
-              Pronto para transformar sua presença digital em captação real?
+              Ficou com alguma dúvida ou quer ajustar algo antes de fechar?
             </h2>
           </MotionReveal>
 
           <MotionReveal delay={0.08}>
             <p className="mx-auto mt-6 max-w-xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
-              Clique abaixo para aceitar a proposta e iniciarmos o processo
-              de contratação.
+              Entre em contato diretamente com Thiago Vaz para conversarmos.
             </p>
           </MotionReveal>
 
           <MotionReveal delay={0.16}>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Button
-                href={whatsappLink}
-                external
-                size="lg"
-                icon={CheckCircle2}
-                iconPosition="left"
-              >
-                Aderir à Proposta
-              </Button>
-              <Button
-                href={whatsappLink}
-                external
-                size="lg"
-                variant="secondary"
-                icon={ArrowRight}
-              >
-                Tirar uma dúvida antes
+            <div className="mt-10 flex justify-center">
+              <Button href={whatsappLink} external size="lg" icon={ArrowRight}>
+                Falar no WhatsApp
               </Button>
             </div>
           </MotionReveal>
 
           <MotionReveal delay={0.24}>
             <p className="mt-10 text-xs text-gray-500">
-              Proposta válida por 15 dias · Vaz Ferreira Advogados · Brain
-              Marketing &amp; Performance
+              Brain Marketing &amp; Performance · brainmktp.com.br
             </p>
           </MotionReveal>
         </div>
