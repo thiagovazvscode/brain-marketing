@@ -1,6 +1,16 @@
 "use client";
 
-import { ArrowRight, Check, Target } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart2,
+  Check,
+  ClipboardList,
+  Palette,
+  Rocket,
+  Search,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GlowCard } from "@/components/ui/GlowCard";
 import { Logo } from "@/components/ui/Logo";
@@ -15,6 +25,44 @@ const badgeClass =
   "inline-flex items-center gap-2 rounded-full border border-brand-magenta/30 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-brand-magenta";
 
 const heroPills = ["Tráfego Pago", "Posicionamento Digital"];
+
+const contextCards = [
+  {
+    icon: Search,
+    text: "82% dos clientes pesquisam o advogado online antes de entrar em contato",
+  },
+  {
+    icon: TrendingUp,
+    text: "Autoridade digital reduz o tempo de decisão do cliente em até 40%",
+  },
+  {
+    icon: Target,
+    text: "Tráfego pago segmentado gera leads jurídicos 3x mais qualificados que orgânico",
+  },
+];
+
+const processSteps = [
+  {
+    icon: ClipboardList,
+    title: "Briefing",
+    desc: "Entendemos o perfil do cliente ideal, as áreas de atuação e os diferenciais do escritório.",
+  },
+  {
+    icon: Palette,
+    title: "Estrutura",
+    desc: "Criamos o calendário editorial, os criativos e configuramos as campanhas.",
+  },
+  {
+    icon: Rocket,
+    title: "Ativação",
+    desc: "Publicamos os primeiros conteúdos e colocamos os anúncios no ar.",
+  },
+  {
+    icon: BarChart2,
+    title: "Escala",
+    desc: "Analisamos os dados, otimizamos o que funciona e ampliamos os resultados.",
+  },
+];
 
 const paidTrafficDeliverables = [
   "Gestão completa das campanhas",
@@ -108,7 +156,49 @@ export default function PropostaVazFerreiraPage() {
         </div>
       </section>
 
-      {/* SEÇÃO 3 — O QUE SERÁ ENTREGUE */}
+      {/* SEÇÃO 3 — POR QUE AGORA? */}
+      <section className="px-6 py-20 lg:px-10">
+        <div className="mx-auto max-w-5xl">
+          <MotionReveal>
+            <span className={badgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
+              Contexto
+            </span>
+          </MotionReveal>
+
+          <MotionReveal delay={0.08}>
+            <h2 className="mt-6 font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
+              O mercado jurídico está mudando. Quem sair na frente, fica na
+              frente.
+            </h2>
+          </MotionReveal>
+
+          <MotionReveal delay={0.16}>
+            <p className="mt-5 max-w-3xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
+              Escritórios que dependem só de indicação estão perdendo espaço
+              para advogados que construíram autoridade digital. A captação
+              ativa mudou — e o cliente qualificado pesquisa antes de ligar.
+            </p>
+          </MotionReveal>
+
+          <div className="mt-12 grid gap-5 sm:grid-cols-3">
+            {contextCards.map((card, index) => (
+              <MotionReveal key={card.text} delay={0.2 + index * 0.08}>
+                <div className="h-full rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] text-brand-magenta">
+                    <card.icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <p className="mt-4 text-sm leading-relaxed text-gray-300">
+                    {card.text}
+                  </p>
+                </div>
+              </MotionReveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO 4 — O QUE SERÁ ENTREGUE */}
       <section className="px-6 py-20 lg:px-10">
         <div className="mx-auto max-w-5xl">
           <MotionReveal>
@@ -188,7 +278,74 @@ export default function PropostaVazFerreiraPage() {
         </div>
       </section>
 
-      {/* SEÇÃO 4 — INVESTIMENTO */}
+      {/* SEÇÃO 5 — COMO TRABALHAMOS */}
+      <section className="relative overflow-hidden px-6 py-20 lg:px-10">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10"
+          style={{
+            background:
+              "radial-gradient(ellipse 50% 50% at 50% 50%, rgba(124,58,237,0.08) 0%, transparent 70%)",
+          }}
+        />
+
+        <div className="mx-auto max-w-6xl">
+          <MotionReveal>
+            <span className={badgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
+              Processo
+            </span>
+          </MotionReveal>
+
+          <MotionReveal delay={0.08}>
+            <h2 className="mt-6 font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
+              Do briefing à escala — sem enrolação.
+            </h2>
+          </MotionReveal>
+
+          <MotionReveal delay={0.16}>
+            <p className="mt-5 max-w-2xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
+              Antes de qualquer post ou anúncio, entendemos o escritório. Cada
+              etapa tem um propósito claro.
+            </p>
+          </MotionReveal>
+
+          <div className="relative mt-14">
+            <div
+              aria-hidden="true"
+              className="absolute left-0 right-0 top-7 hidden border-t border-dashed border-white/20 lg:block"
+            />
+            <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+              {processSteps.map((step, index) => {
+                const isMagenta = index % 2 === 1;
+                return (
+                  <MotionReveal key={step.title} delay={index * 0.1}>
+                    <div className="relative flex flex-col items-start lg:items-center lg:text-center">
+                      <span
+                        className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border bg-[#0f0a1e] ${
+                          isMagenta
+                            ? "border-brand-magenta/30 text-brand-magenta"
+                            : "border-brand-primary/30 text-brand-primary"
+                        }`}
+                      >
+                        <step.icon className="h-6 w-6" aria-hidden="true" />
+                      </span>
+                      <h3 className="mt-4 font-display text-base font-semibold text-white">
+                        {step.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-gray-400">
+                        {step.desc}
+                      </p>
+                    </div>
+                  </MotionReveal>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO 6 — INVESTIMENTO */}
       <section className="relative overflow-hidden px-6 py-24 lg:px-10">
         <div
           aria-hidden="true"
@@ -261,7 +418,7 @@ export default function PropostaVazFerreiraPage() {
         </div>
       </section>
 
-      {/* SEÇÃO 5 — CTA FINAL */}
+      {/* SEÇÃO 7 — CTA FINAL */}
       <section className="relative overflow-hidden px-6 py-28 text-center lg:px-10">
         <div
           aria-hidden="true"
