@@ -1,7 +1,216 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+/* ══════════════════════════════════════════════════
+   QUIZ CHATBOT
+══════════════════════════════════════════════════ */
+
+const WHATSAPP_NUM = "5591985855801";
+function wa(msg: string) {
+  return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(msg)}`;
+}
+
+type Step = { q: string; opts: string[] };
+
+const STEPS: Step[] = [
+  {
+    q: "Qual é o seu principal objetivo agora?",
+    opts: [
+      "Atrair mais clientes com anúncios pagos",
+      "Produção visual com drone e câmera profissional",
+      "Organizar vendas com CRM e inteligência artificial",
+      "Descobrir onde estou perdendo vendas",
+    ],
+  },
+  {
+    q: "Como você se define no mercado imobiliário?",
+    opts: [
+      "Corretor autônomo",
+      "Tenho uma imobiliária",
+      "Incorporadora ou lançamentos",
+      "Outro tipo de empresa",
+    ],
+  },
+  {
+    q: "Como está sua captação de clientes hoje?",
+    opts: [
+      "Dependo quase só de indicações",
+      "Já anuncio, mas os resultados são fracos",
+      "Anuncio e quero escalar mais",
+      "Não tenho processo definido",
+    ],
+  },
+  {
+    q: "Você tem gestão de leads organizada?",
+    opts: [
+      "Não — uso só WhatsApp e planilha",
+      "Tenho uma ferramenta, mas é complicado",
+      "Sim, mas quero algo mais completo",
+    ],
+  },
+  {
+    q: "O que seria uma vitória para você em 90 dias?",
+    opts: [
+      "Leads qualificados chegando todo dia",
+      "Vídeos e fotos profissionais dos meus imóveis",
+      "Processo de vendas organizado e escalável",
+      "Saber exatamente onde perco clientes",
+    ],
+  },
+];
+
+type Result = { icon: string; title: string; desc: string; href: string };
+
+function calcResult(answers: number[]): Result {
+  const [q1, q2] = answers;
+
+  if (q1 === 1)
+    return {
+      icon: "🎬",
+      title: "Audiovisual Imobiliário",
+      desc: "Drone, câmera e edição profissional para valorizar seus imóveis e fortalecer sua apresentação comercial.",
+      href: wa("Olá! Fiz o quiz no site e o resultado indicou Audiovisual. Quero saber mais sobre drone e câmera profissional."),
+    };
+
+  if (q1 === 2)
+    return {
+      icon: "🤖",
+      title: "BrokerApps — CRM com IA",
+      desc: "Plataforma com SDR, CRM kanban, vitrine digital e dashboard do Meta Ads integrado para organizar sua operação.",
+      href: "https://brokerapps.com.br",
+    };
+
+  if (q1 === 3)
+    return {
+      icon: "🩺",
+      title: "Diagnóstico Comercial",
+      desc: "Analisamos sua operação de marketing, atendimento e conversão para mostrar onde estão os gargalos.",
+      href: wa("Olá! Fiz o quiz no site e o resultado indicou Diagnóstico Comercial. Quero agendar meu diagnóstico."),
+    };
+
+  // Q1 = 0 → Tráfego Pago, refinado pelo Q2
+  const niches = ["Corretores", "Imobiliárias", "Incorporadoras", "Empresas"];
+  const msgs = [
+    "Olá! Fiz o quiz no site — sou corretor autônomo e preciso de tráfego pago. Quero saber mais.",
+    "Olá! Fiz o quiz no site — tenho uma imobiliária e preciso de tráfego pago. Quero saber mais.",
+    "Olá! Fiz o quiz no site — tenho uma incorporadora e preciso de tráfego pago. Quero saber mais.",
+    "Olá! Fiz o quiz no site — tenho uma empresa e preciso de tráfego pago. Quero saber mais.",
+  ];
+  return {
+    icon: "📈",
+    title: `Tráfego Pago · ${niches[q2] ?? "Imóveis"}`,
+    desc: "Campanhas no Meta Ads e Google Ads para gerar leads qualificados e atrair compradores para o seu negócio.",
+    href: wa(msgs[q2] ?? msgs[0]),
+  };
+}
+
+function QuizModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [result, setResult] = useState<Result | null>(null);
+  const [animating, setAnimating] = useState(false);
+
+  function choose(idx: number) {
+    if (animating) return;
+    const next = [...answers, idx];
+    setAnimating(true);
+    setTimeout(() => {
+      setAnimating(false);
+      if (step + 1 >= STEPS.length) {
+        setResult(calcResult(next));
+      } else {
+        setAnswers(next);
+        setStep((s) => s + 1);
+      }
+    }, 300);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="quiz-slide-up w-full max-w-md overflow-hidden rounded-3xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header chat */}
+        <div className="flex items-center gap-3 bg-gradient-to-r from-violet-700 via-fuchsia-600 to-pink-600 px-5 py-4">
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white/30">
+            <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-white">Thiago Vaz vai te ajudar 🧠</p>
+            <p className="flex items-center gap-1.5 text-[11px] text-white/70">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              Responde e eu te indico o melhor caminho
+            </p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="bg-[#f5f0ff] px-5 pb-6 pt-5">
+          {!result ? (
+            <>
+              {/* Progresso */}
+              <div className="mb-4 flex gap-1.5">
+                {STEPS.map((_, i) => (
+                  <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= step ? "bg-fuchsia-500" : "bg-fuchsia-200"}`} />
+                ))}
+              </div>
+
+              {/* Balão pergunta */}
+              <div className={`mb-4 transition-all duration-300 ${animating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"}`}>
+                <div className="inline-block rounded-2xl rounded-tl-none bg-gradient-to-br from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-bold leading-snug text-white shadow">
+                  {STEPS[step].q}
+                </div>
+              </div>
+
+              {/* Opções */}
+              <div className={`space-y-2 transition-all duration-300 ${animating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"}`}>
+                {STEPS[step].opts.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => choose(i)}
+                    className="w-full rounded-2xl border border-fuchsia-100 bg-white px-4 py-3.5 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-fuchsia-400 hover:bg-fuchsia-50 hover:text-fuchsia-700 active:scale-[0.98]"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            /* Resultado */
+            <div className="text-center">
+              <div className="mb-3 text-5xl">{result.icon}</div>
+              <p className="mb-1 text-xs font-black uppercase tracking-widest text-fuchsia-500">Indicação personalizada</p>
+              <h3 className="mb-3 text-xl font-black text-slate-900">{result.title}</h3>
+              <p className="mb-6 text-sm leading-relaxed text-slate-600">{result.desc}</p>
+              <a
+                href={result.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-4 text-sm font-black text-white shadow-lg shadow-fuchsia-500/25 transition hover:opacity-90 active:scale-[0.98]"
+              >
+                Quero conhecer →
+              </a>
+              <button
+                onClick={() => { setStep(0); setAnswers([]); setResult(null); }}
+                className="mt-3 text-xs text-slate-400 underline underline-offset-2 hover:text-slate-600"
+              >
+                Refazer o quiz
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function useScrollReveal() {
   useEffect(() => {
@@ -21,12 +230,6 @@ function useScrollReveal() {
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
-}
-
-const WHATSAPP = "5591985855801";
-
-function wa(msg: string) {
-  return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`;
 }
 
 const BANNERS: { src: string; alt: string; href: string; glow?: "green" | "purple" }[] = [
@@ -70,8 +273,10 @@ const BANNERS: { src: string; alt: string; href: string; glow?: "green" | "purpl
 
 export default function HubPage() {
   useScrollReveal();
+  const [quizOpen, setQuizOpen] = useState(false);
   return (
     <>
+      {quizOpen && <QuizModal onClose={() => setQuizOpen(false)} />}
       <style>{`
         /* ── Hand click animation ── */
         @keyframes hand-click {
@@ -130,6 +335,13 @@ export default function HubPage() {
           50%       { transform: translate(-50%, -20%) scale(1.08); }
         }
         .hero-blob { animation: blob-drift 8s ease-in-out infinite; }
+
+        /* ── Quiz slide up ── */
+        @keyframes quiz-up {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        .quiz-slide-up { animation: quiz-up .38s cubic-bezier(.4,0,.2,1) both; }
 
         /* ── Scroll reveal ── */
         .sr {
@@ -217,6 +429,27 @@ export default function HubPage() {
         {/* ══════════════ BANNERS ══════════════ */}
         <section className="px-4 pb-16">
           <div className="mx-auto max-w-2xl">
+
+            {/* ── Quiz trigger ── */}
+            <button
+              onClick={() => setQuizOpen(true)}
+              className="sr mb-6 block w-full cursor-pointer rounded-2xl border border-fuchsia-500/30 bg-gradient-to-r from-violet-900/60 via-fuchsia-900/50 to-violet-900/60 px-5 py-4 text-left backdrop-blur-sm transition hover:border-fuchsia-400/60 hover:from-violet-800/70 hover:via-fuchsia-800/60 hover:to-violet-800/70 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-400/40">
+                  <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-black text-white">Não sabe por onde começar? 🤔</p>
+                  <p className="mt-0.5 text-xs text-white/50">Responde 5 perguntas rápidas — eu te indico o melhor serviço</p>
+                </div>
+                <div className="shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2 shadow-lg shadow-fuchsia-500/30">
+                  <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+            </button>
 
             {/* Indicador mãozinha */}
             <div className="mb-5 flex flex-col items-center gap-1.5 text-white/35">
