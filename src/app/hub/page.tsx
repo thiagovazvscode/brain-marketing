@@ -142,7 +142,7 @@ export default function HubPage() {
               <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 opacity-90 blur-[2px]" />
               <div className="relative h-28 w-28 overflow-hidden rounded-full border border-white/10">
                 <Image
-                  src="/images/fundador.jpg"
+                  src="/images/fundador.webp"
                   alt="Thiago Vaz — Brain Marketing & Performance"
                   fill
                   className="object-cover"
