@@ -343,6 +343,31 @@ export default function HubPage() {
         }
         .quiz-slide-up { animation: quiz-up .38s cubic-bezier(.4,0,.2,1) both; }
 
+        /* ── Quiz bell shake (notificação) ── */
+        @keyframes quiz-bell {
+          0%, 80%, 100% { transform: rotate(0deg) scale(1); }
+          83%  { transform: rotate(-5deg) scale(1.025); }
+          86%  { transform: rotate(5deg)  scale(1.025); }
+          89%  { transform: rotate(-4deg) scale(1.015); }
+          92%  { transform: rotate(4deg)  scale(1.015); }
+          95%  { transform: rotate(-2deg) scale(1.005); }
+          98%  { transform: rotate(2deg)  scale(1.005); }
+        }
+        .quiz-bell { animation: quiz-bell 4s ease-in-out infinite; transform-origin: center; }
+
+        @keyframes quiz-border-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(217,70,239,0), 0 0 0 0 rgba(139,92,246,0); border-color: rgba(217,70,239,.30); }
+          50%       { box-shadow: 0 0 22px 5px rgba(217,70,239,.20), 0 0 40px 10px rgba(139,92,246,.12); border-color: rgba(217,70,239,.75); }
+        }
+        .quiz-border-glow { animation: quiz-border-glow 2s ease-in-out infinite; }
+
+        @keyframes badge-bounce {
+          0%, 100% { transform: scale(1); }
+          40%       { transform: scale(1.25); }
+          60%       { transform: scale(0.92); }
+        }
+        .badge-bounce { animation: badge-bounce 1.8s ease-in-out infinite; }
+
         /* ── Scroll reveal ── */
         .sr {
           opacity: 0;
@@ -431,25 +456,31 @@ export default function HubPage() {
           <div className="mx-auto max-w-2xl">
 
             {/* ── Quiz trigger ── */}
-            <button
-              onClick={() => setQuizOpen(true)}
-              className="sr mb-6 block w-full cursor-pointer rounded-2xl border border-fuchsia-500/30 bg-gradient-to-r from-violet-900/60 via-fuchsia-900/50 to-violet-900/60 px-5 py-4 text-left backdrop-blur-sm transition hover:border-fuchsia-400/60 hover:from-violet-800/70 hover:via-fuchsia-800/60 hover:to-violet-800/70 active:scale-[0.98]"
-            >
-              <div className="flex items-center gap-4">
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-400/40">
-                  <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
+            <div className="sr mb-6 quiz-bell quiz-border-glow relative rounded-2xl border">
+              {/* Badge sino */}
+              <span className="badge-bounce absolute -right-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-600 text-sm shadow-lg shadow-fuchsia-500/40 ring-2 ring-[#050510]">
+                🔔
+              </span>
+              <button
+                onClick={() => setQuizOpen(true)}
+                className="block w-full cursor-pointer rounded-2xl bg-gradient-to-r from-violet-900/70 via-fuchsia-900/60 to-violet-900/70 px-5 py-4 text-left backdrop-blur-sm transition hover:from-violet-800/80 hover:via-fuchsia-800/70 hover:to-violet-800/80 active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-400/50">
+                    <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-white">Não sabe por onde começar? 🤔</p>
+                    <p className="mt-0.5 text-xs text-white/55">Responde 5 perguntas rápidas — eu te indico o melhor serviço</p>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2 shadow-lg shadow-fuchsia-500/40">
+                    <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-black text-white">Não sabe por onde começar? 🤔</p>
-                  <p className="mt-0.5 text-xs text-white/50">Responde 5 perguntas rápidas — eu te indico o melhor serviço</p>
-                </div>
-                <div className="shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2 shadow-lg shadow-fuchsia-500/30">
-                  <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </div>
-            </button>
+              </button>
+            </div>
 
             {/* Indicador mãozinha */}
             <div className="mb-5 flex flex-col items-center gap-1.5 text-white/35">
