@@ -137,6 +137,11 @@ export default function HubPage() {
           </div>
 
           <div className="relative mx-auto max-w-md px-4">
+            {/* Logo grande acima da foto */}
+            <div className="mx-auto mb-4 flex justify-center">
+              <Image src="/images/logo.png" alt="Brain Marketing & Performance" width={90} height={90} className="rounded-2xl" />
+            </div>
+
             {/* Foto com anel gradiente */}
             <div className="relative mx-auto mb-6 h-28 w-28">
               <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 opacity-90 blur-[2px]" />
@@ -151,12 +156,8 @@ export default function HubPage() {
               </div>
             </div>
 
-            {/* Logo + label */}
-            <div className="mb-3 flex items-center justify-center gap-2">
-              <Image src="/images/logo.png" alt="Brain" width={34} height={34} className="rounded" />
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/45">
-                Brain Marketing & Performance
-              </span>
+            {/* Label removida — logo já identifica a marca */}
+            <div className="hidden">
             </div>
 
             {/* Nome */}
