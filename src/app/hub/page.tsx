@@ -1,6 +1,27 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useRef } from "react";
+
+function useScrollReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>(".sr");
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            (e.target as HTMLElement).style.opacity = "1";
+            (e.target as HTMLElement).style.transform = "translateY(0) scale(1)";
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.08 }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+}
 
 const WHATSAPP = "5591985855801";
 
@@ -48,6 +69,7 @@ const BANNERS: { src: string; alt: string; href: string; glow?: "green" | "purpl
 ];
 
 export default function HubPage() {
+  useScrollReveal();
   return (
     <>
       <style>{`
@@ -108,6 +130,20 @@ export default function HubPage() {
           50%       { transform: translate(-50%, -20%) scale(1.08); }
         }
         .hero-blob { animation: blob-drift 8s ease-in-out infinite; }
+
+        /* ── Scroll reveal ── */
+        .sr {
+          opacity: 0;
+          transform: translateY(36px) scale(0.97);
+          transition: opacity .55s cubic-bezier(.4,0,.2,1), transform .55s cubic-bezier(.4,0,.2,1);
+        }
+
+        /* ── Hero itens entram ao carregar ── */
+        @keyframes fade-up {
+          from { opacity: 0; transform: translateY(24px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .hero-in { animation: fade-up .7s cubic-bezier(.4,0,.2,1) both; }
       `}</style>
 
       <main className="min-h-screen bg-[#050510] text-white">
@@ -138,12 +174,12 @@ export default function HubPage() {
 
           <div className="relative mx-auto max-w-md px-4">
             {/* Logo grande acima da foto */}
-            <div className="mx-auto mb-4 flex justify-center">
+            <div className="hero-in mx-auto mb-4 flex justify-center" style={{ animationDelay: "0ms" }}>
               <Image src="/images/logo.png" alt="Brain Marketing & Performance" width={90} height={90} className="rounded-2xl" />
             </div>
 
             {/* Foto com anel gradiente */}
-            <div className="relative mx-auto mb-6 h-28 w-28">
+            <div className="hero-in relative mx-auto mb-6 h-28 w-28" style={{ animationDelay: "120ms" }}>
               <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 opacity-90 blur-[2px]" />
               <div className="relative h-28 w-28 overflow-hidden rounded-full border border-white/10">
                 <Image
@@ -161,14 +197,14 @@ export default function HubPage() {
             </div>
 
             {/* Nome */}
-            <h1 className="mb-3 text-[2rem] font-black leading-none tracking-tight">
+            <h1 className="hero-in mb-3 text-[2rem] font-black leading-none tracking-tight" style={{ animationDelay: "220ms" }}>
               <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
                 Thiago Vaz
               </span>
             </h1>
 
             {/* Tagline */}
-            <p className="mx-auto max-w-[280px] text-sm leading-relaxed text-white/45">
+            <p className="hero-in mx-auto max-w-[280px] text-sm leading-relaxed text-white/45" style={{ animationDelay: "320ms" }}>
               Tráfego pago · Audiovisual · Diagnóstico comercial<br />
               <span className="text-white/30">para o mercado imobiliário</span>
             </p>
@@ -190,13 +226,14 @@ export default function HubPage() {
 
             {/* Stack de banners */}
             <div className="space-y-3">
-              {BANNERS.map((banner) => (
+              {BANNERS.map((banner, i) => (
                 <a
                   key={banner.src}
                   href={banner.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`banner-link block w-full cursor-pointer overflow-hidden rounded-2xl active:scale-[0.985] ${banner.glow === "green" ? "glow-green" : ""}`}
+                  style={{ transitionDelay: `${i * 60}ms` }}
+                  className={`sr banner-link block w-full cursor-pointer overflow-hidden rounded-2xl active:scale-[0.985] ${banner.glow === "green" ? "glow-green" : ""}`}
                 >
                   <Image
                     src={banner.src}
