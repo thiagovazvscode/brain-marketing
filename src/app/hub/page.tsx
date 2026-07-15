@@ -145,7 +145,7 @@ export default function HubPage() {
                   src="/images/fundador.webp"
                   alt="Thiago Vaz — Brain Marketing & Performance"
                   fill
-                  className="object-cover object-center"
+                  className="object-cover object-top"
                   priority
                 />
               </div>
@@ -153,7 +153,7 @@ export default function HubPage() {
 
             {/* Logo + label */}
             <div className="mb-3 flex items-center justify-center gap-2">
-              <Image src="/images/logo.png" alt="Brain" width={22} height={22} className="rounded" />
+              <Image src="/images/logo.png" alt="Brain" width={34} height={34} className="rounded" />
               <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/45">
                 Brain Marketing & Performance
               </span>
