@@ -138,14 +138,14 @@ export default function HubPage() {
 
           <div className="relative mx-auto max-w-md px-4">
             {/* Foto com anel gradiente */}
-            <div className="relative mx-auto mb-6 w-fit">
+            <div className="relative mx-auto mb-6 h-28 w-28">
               <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 opacity-90 blur-[2px]" />
               <div className="relative h-28 w-28 overflow-hidden rounded-full border border-white/10">
                 <Image
                   src="/images/fundador.webp"
                   alt="Thiago Vaz — Brain Marketing & Performance"
                   fill
-                  className="object-cover"
+                  className="object-cover object-center"
                   priority
                 />
               </div>
@@ -183,7 +183,7 @@ export default function HubPage() {
 
             {/* Indicador mãozinha */}
             <div className="mb-5 flex flex-col items-center gap-1.5 text-white/35">
-              <span className="hand-anim text-4xl">👆</span>
+              <span className="hand-anim text-4xl">👇</span>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em]">Toque para conhecer</p>
             </div>
 
