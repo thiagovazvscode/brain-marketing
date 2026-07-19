@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default function HubLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#050510] text-white">
+    <div className="min-h-screen bg-[#000000] text-white">
       {children}
     </div>
   );

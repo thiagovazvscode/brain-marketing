@@ -2,17 +2,17 @@
 
 @theme inline {
   /* Neutros */
-  --color-bg: #050510;
-  --color-surface: #08051a;
-  --color-elevated: #0f0a1e;
-  --color-ink: #f5f7f6;
-  --color-muted: #a89bc2;
-  --color-line: #2d1b4e;
+  --color-bg: #000000;
+  --color-surface: #06080d;
+  --color-elevated: #0d1017;
+  --color-ink: #f2f4f8;
+  --color-muted: #8b95a7;
+  --color-line: #1c2230;
 
   /* Marca */
-  --color-brand-primary: #7c3aed;
-  --color-brand-magenta: #d946ef;
-  --color-brand-pink: #ec4899;
+  --color-brand-primary: #2563eb;
+  --color-brand-magenta: #38bdf8;
+  --color-brand-pink: #64748b;
 
   /* Tipografia */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -159,8 +159,8 @@ body {
 
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(168, 155, 194, 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(168, 155, 194, 0.06) 1px, transparent 1px);
+    linear-gradient(to right, rgba(139, 149, 167, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(139, 149, 167, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 

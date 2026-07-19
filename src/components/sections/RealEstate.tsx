@@ -42,7 +42,7 @@ export function RealEstate() {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(to right, #050510 35%, rgba(5,5,16,0.80) 60%, rgba(5,5,16,0.50) 100%)",
+              "linear-gradient(to right, #000000 35%, rgba(5,5,16,0.80) 60%, rgba(5,5,16,0.50) 100%)",
           }}
         />
       </div>

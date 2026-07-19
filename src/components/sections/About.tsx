@@ -108,7 +108,7 @@ function FounderPhoto() {
     <MotionReveal className="order-first lg:order-last">
       <div
         className="relative mx-auto w-full max-w-sm overflow-hidden rounded-3xl sm:max-w-md"
-        style={{ height: "480px", boxShadow: "0 0 80px rgba(124, 58, 237, 0.15)" }}
+        style={{ height: "480px", boxShadow: "0 0 80px rgba(37, 99, 235, 0.15)" }}
       >
         <Image
           src="/images/fundador.webp"
@@ -120,7 +120,7 @@ function FounderPhoto() {
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
-          style={{ background: "linear-gradient(to top, #050510 0%, transparent 40%)" }}
+          style={{ background: "linear-gradient(to top, #000000 0%, transparent 40%)" }}
         />
         <span className="absolute bottom-5 left-5 inline-flex items-center gap-1.5 rounded-full border border-brand-magenta/40 bg-bg/70 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-brand-magenta backdrop-blur-sm">
           Fundador &amp; Estrategista

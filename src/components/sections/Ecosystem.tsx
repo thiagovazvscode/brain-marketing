@@ -11,13 +11,13 @@ export function Ecosystem() {
   const radius = 42;
 
   return (
-    <section id="ecossistema" className="relative overflow-hidden bg-[#050510] py-24 sm:py-32">
+    <section id="ecossistema" className="relative overflow-hidden bg-[#000000] py-24 sm:py-32">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(124,58,237,0.08) 0%, transparent 70%)",
+            "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(37, 99, 235,0.08) 0%, transparent 70%)",
         }}
       />
 
@@ -47,8 +47,8 @@ export function Ecosystem() {
           >
             <defs>
               <linearGradient id="synapseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#EC4899" stopOpacity="0.3" />
+                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#64748b" stopOpacity="0.3" />
               </linearGradient>
             </defs>
             {ecosystemNodes.map((node, index) => {
@@ -74,7 +74,7 @@ export function Ecosystem() {
                   />
                   <motion.circle
                     r={0.8}
-                    fill="#D946EF"
+                    fill="#38bdf8"
                     initial={{ opacity: 0 }}
                     animate={{ cx: [50, x], cy: [50, y], opacity: [0, 1, 0] }}
                     transition={{
@@ -100,9 +100,9 @@ export function Ecosystem() {
             <motion.div
               animate={{
                 boxShadow: [
-                  "0 0 30px rgba(124,58,237,0.3)",
-                  "0 0 60px rgba(124,58,237,0.6)",
-                  "0 0 30px rgba(124,58,237,0.3)",
+                  "0 0 30px rgba(37, 99, 235,0.3)",
+                  "0 0 60px rgba(37, 99, 235,0.6)",
+                  "0 0 30px rgba(37, 99, 235,0.3)",
                 ],
               }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
@@ -112,11 +112,11 @@ export function Ecosystem() {
                 className="h-10 w-10 text-brand-primary"
                 style={{
                   filter:
-                    "drop-shadow(0 0 20px rgba(124,58,237,0.6)) drop-shadow(0 0 40px rgba(124,58,237,0.3))",
+                    "drop-shadow(0 0 20px rgba(37, 99, 235,0.6)) drop-shadow(0 0 40px rgba(37, 99, 235,0.3))",
                 }}
                 aria-hidden="true"
               />
-              <span className="mt-2 text-[10px] font-medium uppercase tracking-widest text-violet-300">
+              <span className="mt-2 text-[10px] font-medium uppercase tracking-widest text-blue-300">
                 Núcleo
               </span>
             </motion.div>

@@ -33,7 +33,7 @@ export function Audiovisual() {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(135deg, #050510 0%, rgba(5,5,16,0.75) 45%, rgba(5,5,16,0.45) 100%)",
+              "linear-gradient(135deg, #000000 0%, rgba(5,5,16,0.75) 45%, rgba(5,5,16,0.45) 100%)",
           }}
         />
       </div>

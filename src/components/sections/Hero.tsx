@@ -7,16 +7,16 @@ import { Button } from "@/components/ui/Button";
 import { MotionReveal } from "@/components/ui/MotionReveal";
 
 const indicators = [
-  { color: "#7C3AED", label: "Estratégia antes da execução" },
-  { color: "#D946EF", label: "Aquisição conectada à venda" },
-  { color: "#EC4899", label: "Performance orientada a dados" },
+  { color: "#2563eb", label: "Estratégia antes da execução" },
+  { color: "#38bdf8", label: "Aquisição conectada à venda" },
+  { color: "#64748b", label: "Performance orientada a dados" },
 ];
 
 export function Hero() {
   return (
     <section
       id="inicio"
-      className="relative flex min-h-screen items-center overflow-hidden bg-[#050510] pb-20 pt-32 sm:pt-36"
+      className="relative flex min-h-screen items-center overflow-hidden bg-[#000000] pb-20 pt-32 sm:pt-36"
     >
       {/* Camada 1: imagem de fundo */}
       <div className="absolute inset-0 z-0">
@@ -29,13 +29,13 @@ export function Hero() {
         />
       </div>
 
-      {/* Camada 2: gradiente radial central violet */}
+      {/* Camada 2: gradiente radial central azul */}
       <div
         aria-hidden="true"
         className="absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 70% 60% at 60% 50%, rgba(124,58,237,0.10) 0%, rgba(217,70,239,0.05) 60%, transparent 100%)",
+            "radial-gradient(ellipse 70% 60% at 60% 50%, rgba(37, 99, 235,0.10) 0%, rgba(56, 189, 248,0.05) 60%, transparent 100%)",
         }}
       />
 
@@ -56,7 +56,7 @@ export function Hero() {
         className="absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 100% 100% at 50% 50%, transparent 50%, #050510 100%)",
+            "radial-gradient(ellipse 100% 100% at 50% 50%, transparent 50%, #000000 100%)",
         }}
       />
 
@@ -73,7 +73,7 @@ export function Hero() {
             <h1 className="font-display text-balance text-4xl leading-[1.08] sm:text-5xl md:text-6xl lg:text-[3.6rem]">
               <span className="font-bold text-white">Marketing que gera demanda.</span>{" "}
               <span className="font-medium text-white">
-                <span className="bg-gradient-to-r from-violet-500 via-fuchsia-400 to-pink-500 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-blue-500 via-sky-400 to-slate-500 bg-clip-text text-transparent">
                   Performance
                 </span>{" "}
                 que sustenta o crescimento.
@@ -238,11 +238,11 @@ function NeuralNetwork({ variant }: { variant: "desktop" | "mobile" }) {
         className="relative h-[92%] w-[92%] overflow-visible"
         aria-hidden="true"
       >
-        <g style={{ filter: "drop-shadow(0 0 4px rgba(124,58,237,0.35))" }}>
+        <g style={{ filter: "drop-shadow(0 0 4px rgba(37, 99, 235,0.35))" }}>
           {edges.map(([a, b], index) => {
             const na = nodes[a];
             const nb = nodes[b];
-            const lineColor = index % 2 === 0 ? "rgba(124,58,237,0.4)" : "rgba(236,72,153,0.3)";
+            const lineColor = index % 2 === 0 ? "rgba(37, 99, 235,0.4)" : "rgba(100, 116, 139,0.3)";
             const pulseDuration = 2 + ((index * 11) % 20) / 10;
             return (
               <motion.line
@@ -273,8 +273,8 @@ function NeuralNetwork({ variant }: { variant: "desktop" | "mobile" }) {
 
         {nodes.map((node, index) => {
           const isMagenta = index % 2 === 1;
-          const color = isMagenta ? "#D946EF" : "#7C3AED";
-          const glowColor = isMagenta ? "rgba(217,70,239,0.8)" : "rgba(124,58,237,0.8)";
+          const color = isMagenta ? "#38bdf8" : "#2563eb";
+          const glowColor = isMagenta ? "rgba(56, 189, 248,0.8)" : "rgba(37, 99, 235,0.8)";
           const anchor = node.x > center + 10 ? "start" : node.x < center - 10 ? "end" : "middle";
           const dx = anchor === "start" ? 10 : anchor === "end" ? -10 : 0;
           const dy = node.y < 30 ? -10 : 12;
@@ -335,7 +335,7 @@ function NeuralNetwork({ variant }: { variant: "desktop" | "mobile" }) {
                 fontWeight={500}
                 letterSpacing="0.02em"
                 fill="rgba(255,255,255,0.8)"
-                stroke="#050510"
+                stroke="#000000"
                 strokeWidth={3}
                 paintOrder="stroke"
                 style={{ fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}
@@ -371,8 +371,8 @@ function SignalParticles({
           <motion.circle
             key={`particle-${edgeIndex}`}
             r={3}
-            fill="#D946EF"
-            style={{ filter: "drop-shadow(0 0 4px rgba(217,70,239,0.9))" }}
+            fill="#38bdf8"
+            style={{ filter: "drop-shadow(0 0 4px rgba(56, 189, 248,0.9))" }}
             initial={{ opacity: 0 }}
             animate={{
               cx: [na.x, nb.x],

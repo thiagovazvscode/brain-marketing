@@ -19,9 +19,9 @@ export default async function OpengraphImage() {
           flexDirection: "column",
           justifyContent: "center",
           padding: "80px",
-          backgroundColor: "#050510",
+          backgroundColor: "#000000",
           backgroundImage:
-            "radial-gradient(circle at 20% 20%, rgba(124,58,237,0.2), transparent 45%), radial-gradient(circle at 80% 80%, rgba(217,70,239,0.16), transparent 45%)",
+            "radial-gradient(circle at 20% 20%, rgba(37, 99, 235,0.2), transparent 45%), radial-gradient(circle at 80% 80%, rgba(56, 189, 248,0.16), transparent 45%)",
         }}
       >
         <div
@@ -36,11 +36,11 @@ export default async function OpengraphImage() {
               width: 20,
               height: 20,
               borderRadius: 999,
-              backgroundColor: "#7C3AED",
+              backgroundColor: "#2563eb",
               display: "flex",
             }}
           />
-          <span style={{ fontSize: 28, color: "#D946EF", letterSpacing: 2 }}>
+          <span style={{ fontSize: 28, color: "#38bdf8", letterSpacing: 2 }}>
             MARKETING &amp; PERFORMANCE
           </span>
         </div>
@@ -49,7 +49,7 @@ export default async function OpengraphImage() {
             marginTop: 32,
             fontSize: 84,
             fontWeight: 600,
-            color: "#F5F7F6",
+            color: "#f2f4f8",
             lineHeight: 1.1,
           }}
         >
@@ -59,7 +59,7 @@ export default async function OpengraphImage() {
           style={{
             marginTop: 24,
             fontSize: 32,
-            color: "#A89BC2",
+            color: "#8b95a7",
             maxWidth: 820,
           }}
         >

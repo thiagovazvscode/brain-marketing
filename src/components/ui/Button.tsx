@@ -48,7 +48,7 @@ const sizeClasses: Record<Size, string> = {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-brand-primary text-ink shadow-[0_0_0_1px_rgba(124,58,237,0.4),0_18px_40px_-16px_rgba(124,58,237,0.55)] hover:bg-[#c084fc] hover:shadow-[0_0_0_1px_rgba(124,58,237,0.6),0_22px_50px_-14px_rgba(124,58,237,0.75)]",
+    "bg-brand-primary text-ink shadow-[0_0_0_1px_rgba(37, 99, 235,0.4),0_18px_40px_-16px_rgba(37, 99, 235,0.55)] hover:bg-[#60a5fa] hover:shadow-[0_0_0_1px_rgba(37, 99, 235,0.6),0_22px_50px_-14px_rgba(37, 99, 235,0.75)]",
   secondary:
     "border border-brand-primary/50 text-ink bg-elevated/40 hover:border-brand-primary hover:bg-elevated",
   ghost: "text-ink/80 hover:text-ink",

@@ -34,7 +34,7 @@ export function BackgroundEffects() {
           className="absolute h-[420px] w-[420px] rounded-full opacity-[0.07] blur-[100px] transition-transform duration-300 ease-out"
           style={{
             background:
-              "radial-gradient(circle, rgba(124,58,237,1) 0%, rgba(217,70,239,0.6) 45%, transparent 70%)",
+              "radial-gradient(circle, rgba(37, 99, 235,1) 0%, rgba(56, 189, 248,0.6) 45%, transparent 70%)",
             transform: `translate3d(${x - 210}px, ${y - 210}px, 0)`,
           }}
         />

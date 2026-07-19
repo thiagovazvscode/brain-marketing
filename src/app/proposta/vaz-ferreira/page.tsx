@@ -114,7 +114,7 @@ export default function PropostaVazFerreiraPage() {
           className="absolute inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(ellipse 70% 60% at 50% 0%, rgba(124,58,237,0.14) 0%, rgba(217,70,239,0.06) 55%, transparent 100%)",
+              "radial-gradient(ellipse 70% 60% at 50% 0%, rgba(37, 99, 235,0.14) 0%, rgba(56, 189, 248,0.06) 55%, transparent 100%)",
           }}
         />
 
@@ -129,7 +129,7 @@ export default function PropostaVazFerreiraPage() {
           <MotionReveal delay={0.08}>
             <h1 className="mt-6 text-balance font-display text-4xl font-bold leading-[1.05] text-white sm:text-5xl md:text-6xl">
               Vaz Ferreira{" "}
-              <span className="bg-gradient-to-r from-violet-500 to-pink-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-500 to-slate-500 bg-clip-text text-transparent">
                 Advogados
               </span>
             </h1>
@@ -211,7 +211,7 @@ export default function PropostaVazFerreiraPage() {
             <MotionReveal delay={0.08} direction="left">
               <GlowCard
                 className="h-full border-brand-primary/30 p-8"
-                glowColor="rgba(124,58,237,0.18)"
+                glowColor="rgba(37, 99, 235,0.18)"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-primary/30 text-brand-primary">
                   <Target className="h-5 w-5" aria-hidden="true" />
@@ -246,7 +246,7 @@ export default function PropostaVazFerreiraPage() {
             <MotionReveal delay={0.16} direction="right">
               <GlowCard
                 className="h-full border-brand-magenta/30 p-8"
-                glowColor="rgba(217,70,239,0.18)"
+                glowColor="rgba(56, 189, 248,0.18)"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-magenta/30 text-brand-magenta">
                   <InstagramIcon className="h-5 w-5" aria-hidden="true" />
@@ -285,7 +285,7 @@ export default function PropostaVazFerreiraPage() {
           className="absolute inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(ellipse 50% 50% at 50% 50%, rgba(124,58,237,0.08) 0%, transparent 70%)",
+              "radial-gradient(ellipse 50% 50% at 50% 50%, rgba(37, 99, 235,0.08) 0%, transparent 70%)",
           }}
         />
 
@@ -322,7 +322,7 @@ export default function PropostaVazFerreiraPage() {
                   <MotionReveal key={step.title} delay={index * 0.1}>
                     <div className="relative flex flex-col items-start lg:items-center lg:text-center">
                       <span
-                        className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border bg-[#0f0a1e] ${
+                        className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border bg-[#0d1017] ${
                           isMagenta
                             ? "border-brand-magenta/30 text-brand-magenta"
                             : "border-brand-primary/30 text-brand-primary"
@@ -349,7 +349,7 @@ export default function PropostaVazFerreiraPage() {
       <section className="relative overflow-hidden px-6 py-24 lg:px-10">
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-gradient-to-b from-[#1a0b2e] via-[#0f0a1e] to-[#050510]"
+          className="absolute inset-0 -z-10 bg-gradient-to-b from-[#0a0e16] via-[#0d1017] to-[#000000]"
         />
         <div
           aria-hidden="true"

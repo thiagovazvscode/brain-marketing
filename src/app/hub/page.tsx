@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { LeadCaptureModal } from "@/components/tracking/LeadCaptureModal";
 
 /* ══════════════════════════════════════════════════
    QUIZ CHATBOT
@@ -106,7 +107,13 @@ function calcResult(answers: number[]): Result {
   };
 }
 
-function QuizModal({ onClose }: { onClose: () => void }) {
+function QuizModal({
+  onClose,
+  onRequestCapture,
+}: {
+  onClose: () => void;
+  onRequestCapture: (service: string, whatsappHref: string) => void;
+}) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<Result | null>(null);
@@ -134,7 +141,7 @@ function QuizModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header chat */}
-        <div className="flex items-center gap-3 bg-gradient-to-r from-violet-700 via-fuchsia-600 to-pink-600 px-5 py-4">
+        <div className="flex items-center gap-3 bg-gradient-to-r from-blue-700 via-sky-600 to-slate-600 px-5 py-4">
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white/30">
             <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
           </div>
@@ -153,19 +160,19 @@ function QuizModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Body */}
-        <div className="bg-[#f5f0ff] px-5 pb-6 pt-5">
+        <div className="bg-[#e8edf5] px-5 pb-6 pt-5">
           {!result ? (
             <>
               {/* Progresso */}
               <div className="mb-4 flex gap-1.5">
                 {STEPS.map((_, i) => (
-                  <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= step ? "bg-fuchsia-500" : "bg-fuchsia-200"}`} />
+                  <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= step ? "bg-sky-500" : "bg-sky-200"}`} />
                 ))}
               </div>
 
               {/* Balão pergunta */}
               <div className={`mb-4 transition-all duration-300 ${animating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"}`}>
-                <div className="inline-block rounded-2xl rounded-tl-none bg-gradient-to-br from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-bold leading-snug text-white shadow">
+                <div className="inline-block rounded-2xl rounded-tl-none bg-gradient-to-br from-blue-600 to-sky-600 px-4 py-3 text-sm font-bold leading-snug text-white shadow">
                   {STEPS[step].q}
                 </div>
               </div>
@@ -176,7 +183,7 @@ function QuizModal({ onClose }: { onClose: () => void }) {
                   <button
                     key={i}
                     onClick={() => choose(i)}
-                    className="w-full rounded-2xl border border-fuchsia-100 bg-white px-4 py-3.5 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-fuchsia-400 hover:bg-fuchsia-50 hover:text-fuchsia-700 active:scale-[0.98]"
+                    className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3.5 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 active:scale-[0.98]"
                   >
                     {opt}
                   </button>
@@ -187,17 +194,29 @@ function QuizModal({ onClose }: { onClose: () => void }) {
             /* Resultado */
             <div className="text-center">
               <div className="mb-3 text-5xl">{result.icon}</div>
-              <p className="mb-1 text-xs font-black uppercase tracking-widest text-fuchsia-500">Indicação personalizada</p>
+              <p className="mb-1 text-xs font-black uppercase tracking-widest text-sky-500">Indicação personalizada</p>
               <h3 className="mb-3 text-xl font-black text-slate-900">{result.title}</h3>
               <p className="mb-6 text-sm leading-relaxed text-slate-600">{result.desc}</p>
-              <a
-                href={result.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-4 text-sm font-black text-white shadow-lg shadow-fuchsia-500/25 transition hover:opacity-90 active:scale-[0.98]"
-              >
-                Quero conhecer →
-              </a>
+              {result.href.includes("brokerapps.com.br") ? (
+                <a
+                  href={result.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full rounded-2xl bg-gradient-to-r from-blue-600 to-sky-600 py-4 text-sm font-black text-white shadow-lg shadow-sky-500/25 transition hover:opacity-90 active:scale-[0.98]"
+                >
+                  Quero conhecer →
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    onRequestCapture(result.title, result.href);
+                    onClose();
+                  }}
+                  className="block w-full rounded-2xl bg-gradient-to-r from-blue-600 to-sky-600 py-4 text-sm font-black text-white shadow-lg shadow-sky-500/25 transition hover:opacity-90 active:scale-[0.98]"
+                >
+                  Quero conhecer →
+                </button>
+              )}
               <button
                 onClick={() => { setStep(0); setAnswers([]); setResult(null); }}
                 className="mt-3 text-xs text-slate-400 underline underline-offset-2 hover:text-slate-600"
@@ -232,51 +251,79 @@ function useScrollReveal() {
   }, []);
 }
 
-const BANNERS: { src: string; alt: string; href: string; glow?: "green" | "purple" }[] = [
+const BANNERS: {
+  src: string;
+  alt: string;
+  href: string;
+  service: string;
+  glow?: "green" | "purple";
+  direct?: boolean;
+}[] = [
   {
     src: "/images/hub/banner-incorporadoras.png",
     alt: "Tráfego Pago para Incorporadoras — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha incorporadora. Quero saber mais sobre os serviços da Brain Marketing."),
+    service: "Tráfego Pago para Incorporadoras",
   },
   {
     src: "/images/hub/banner-imobiliarias.png",
     alt: "Tráfego Pago para Imobiliárias — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha imobiliária. Quero saber mais sobre os serviços da Brain Marketing."),
+    service: "Tráfego Pago para Imobiliárias",
   },
   {
     src: "/images/hub/banner-corretores.png",
     alt: "Tráfego Pago para Corretores Autônomos — Brain Marketing",
     href: wa("Olá! Sou corretor autônomo e tenho interesse em tráfego pago. Quero saber mais sobre os serviços da Brain Marketing."),
+    service: "Tráfego Pago para Corretores Autônomos",
   },
   {
     src: "/images/hub/banner-empresas.png",
     alt: "Tráfego Pago para Empresas — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha empresa. Quero saber mais sobre os serviços da Brain Marketing."),
+    service: "Tráfego Pago para Empresas",
   },
   {
     src: "/images/hub/banner-audiovisual.png",
     alt: "Audiovisual Imobiliário — Drone e Câmera Profissional — Brain Marketing",
     href: wa("Olá! Tenho interesse nos serviços de audiovisual da Brain Marketing. Quero saber mais."),
+    service: "Audiovisual Imobiliário",
   },
   {
     src: "/images/hub/banner-brokerapps.png",
     alt: "BrokerApps — Do Lead à Venda, Tudo em Uma Única Plataforma",
     href: "https://brokerapps.com.br",
+    service: "BrokerApps",
     glow: "green",
+    direct: true,
   },
   {
     src: "/images/hub/banner-diagnostico.png",
     alt: "Diagnóstico Comercial — Brain Marketing",
     href: wa("Olá! Quero agendar um diagnóstico comercial com a Brain Marketing."),
+    service: "Diagnóstico Comercial",
   },
 ];
 
 export default function HubPage() {
   useScrollReveal();
   const [quizOpen, setQuizOpen] = useState(false);
+  const [leadCapture, setLeadCapture] = useState<{ service: string; href: string } | null>(null);
   return (
     <>
-      {quizOpen && <QuizModal onClose={() => setQuizOpen(false)} />}
+      {quizOpen && (
+        <QuizModal
+          onClose={() => setQuizOpen(false)}
+          onRequestCapture={(service, href) => setLeadCapture({ service, href })}
+        />
+      )}
+      {leadCapture && (
+        <LeadCaptureModal
+          service={leadCapture.service}
+          whatsappHref={leadCapture.href}
+          onClose={() => setLeadCapture(null)}
+        />
+      )}
       <style>{`
         /* ── Hand click animation ── */
         @keyframes hand-click {
@@ -289,7 +336,7 @@ export default function HubPage() {
         .hand-anim {
           display: inline-block;
           animation: hand-click 1.6s ease-in-out infinite;
-          filter: drop-shadow(0 0 8px rgba(217,70,239,.7));
+          filter: drop-shadow(0 0 8px rgba(56, 189, 248,.7));
         }
 
         /* ── Green glow pulse (BrokerApps) ── */
@@ -356,8 +403,8 @@ export default function HubPage() {
         .quiz-bell { animation: quiz-bell 4s ease-in-out infinite; transform-origin: center; }
 
         @keyframes quiz-border-glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(217,70,239,0), 0 0 0 0 rgba(139,92,246,0); border-color: rgba(217,70,239,.30); }
-          50%       { box-shadow: 0 0 22px 5px rgba(217,70,239,.20), 0 0 40px 10px rgba(139,92,246,.12); border-color: rgba(217,70,239,.75); }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248,0), 0 0 0 0 rgba(139,92,246,0); border-color: rgba(56, 189, 248,.30); }
+          50%       { box-shadow: 0 0 22px 5px rgba(56, 189, 248,.20), 0 0 40px 10px rgba(139,92,246,.12); border-color: rgba(56, 189, 248,.75); }
         }
         .quiz-border-glow { animation: quiz-border-glow 2s ease-in-out infinite; }
 
@@ -383,7 +430,7 @@ export default function HubPage() {
         .hero-in { animation: fade-up .7s cubic-bezier(.4,0,.2,1) both; }
       `}</style>
 
-      <main className="min-h-screen bg-[#050510] text-white">
+      <main className="min-h-screen bg-[#000000] text-white">
 
         {/* ══════════════ HERO ══════════════ */}
         <section className="relative overflow-hidden pb-14 pt-16 text-center">
@@ -392,17 +439,17 @@ export default function HubPage() {
           <div className="pointer-events-none absolute inset-0">
             <div
               className="hero-blob absolute left-1/2 top-0 h-[560px] w-[560px] rounded-full opacity-25"
-              style={{ background: "radial-gradient(ellipse, #7C3AED 0%, transparent 68%)" }}
+              style={{ background: "radial-gradient(ellipse, #2563eb 0%, transparent 68%)" }}
             />
             <div
               className="absolute left-1/2 top-16 h-[320px] w-[320px] -translate-x-1/4 rounded-full opacity-15"
-              style={{ background: "radial-gradient(ellipse, #D946EF 0%, transparent 68%)" }}
+              style={{ background: "radial-gradient(ellipse, #38bdf8 0%, transparent 68%)" }}
             />
             {/* Grid sutil */}
             <svg className="absolute inset-0 h-full w-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <pattern id="gr" width="48" height="48" patternUnits="userSpaceOnUse">
-                  <path d="M48 0L0 0 0 48" fill="none" stroke="#a855f7" strokeWidth="0.8"/>
+                  <path d="M48 0L0 0 0 48" fill="none" stroke="#3b82f6" strokeWidth="0.8"/>
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#gr)"/>
@@ -417,7 +464,7 @@ export default function HubPage() {
 
             {/* Foto com anel gradiente */}
             <div className="hero-in relative mx-auto mb-6 h-28 w-28" style={{ animationDelay: "120ms" }}>
-              <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 opacity-90 blur-[2px]" />
+              <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-blue-500 via-sky-500 to-slate-500 opacity-90 blur-[2px]" />
               <div className="relative h-28 w-28 overflow-hidden rounded-full border border-white/10">
                 <Image
                   src="/images/fundador.webp"
@@ -435,7 +482,7 @@ export default function HubPage() {
 
             {/* Nome */}
             <h1 className="hero-in mb-3 text-[2rem] font-black leading-none tracking-tight" style={{ animationDelay: "220ms" }}>
-              <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-400 via-sky-400 to-slate-400 bg-clip-text text-transparent">
                 Thiago Vaz
               </span>
             </h1>
@@ -447,7 +494,7 @@ export default function HubPage() {
             </p>
 
             {/* Divisor */}
-            <div className="mx-auto mt-8 h-px w-24 bg-gradient-to-r from-transparent via-fuchsia-500/50 to-transparent" />
+            <div className="mx-auto mt-8 h-px w-24 bg-gradient-to-r from-transparent via-sky-500/50 to-transparent" />
           </div>
         </section>
 
@@ -458,22 +505,22 @@ export default function HubPage() {
             {/* ── Quiz trigger ── */}
             <div className="sr mb-6 quiz-bell quiz-border-glow relative rounded-2xl border">
               {/* Badge sino */}
-              <span className="badge-bounce absolute -right-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-600 text-sm shadow-lg shadow-fuchsia-500/40 ring-2 ring-[#050510]">
+              <span className="badge-bounce absolute -right-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-600 text-sm shadow-lg shadow-sky-500/40 ring-2 ring-[#000000]">
                 🔔
               </span>
               <button
                 onClick={() => setQuizOpen(true)}
-                className="block w-full cursor-pointer rounded-2xl bg-gradient-to-r from-violet-900/70 via-fuchsia-900/60 to-violet-900/70 px-5 py-4 text-left backdrop-blur-sm transition hover:from-violet-800/80 hover:via-fuchsia-800/70 hover:to-violet-800/80 active:scale-[0.98]"
+                className="block w-full cursor-pointer rounded-2xl bg-gradient-to-r from-blue-900/70 via-sky-900/60 to-blue-900/70 px-5 py-4 text-left backdrop-blur-sm transition hover:from-blue-800/80 hover:via-sky-800/70 hover:to-blue-800/80 active:scale-[0.98]"
               >
                 <div className="flex items-center gap-4">
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-400/50">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-sky-400/50">
                     <Image src="/images/fundador.webp" alt="Thiago Vaz" fill className="object-cover object-top" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black text-white">Não sabe por onde começar? 🤔</p>
                     <p className="mt-0.5 text-xs text-white/55">Responde 5 perguntas rápidas — eu te indico o melhor serviço</p>
                   </div>
-                  <div className="shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2 shadow-lg shadow-fuchsia-500/40">
+                  <div className="shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 p-2 shadow-lg shadow-sky-500/40">
                     <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
@@ -490,15 +537,9 @@ export default function HubPage() {
 
             {/* Stack de banners */}
             <div className="space-y-3">
-              {BANNERS.map((banner, i) => (
-                <a
-                  key={banner.src}
-                  href={banner.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ transitionDelay: `${i * 60}ms` }}
-                  className={`sr banner-link block w-full cursor-pointer overflow-hidden rounded-2xl active:scale-[0.985] ${banner.glow === "green" ? "glow-green" : ""}`}
-                >
+              {BANNERS.map((banner, i) => {
+                const className = `sr banner-link block w-full cursor-pointer overflow-hidden rounded-2xl active:scale-[0.985] ${banner.glow === "green" ? "glow-green" : ""}`;
+                const image = (
                   <Image
                     src={banner.src}
                     alt={banner.alt}
@@ -507,8 +548,34 @@ export default function HubPage() {
                     className="w-full h-auto block"
                     sizes="(max-width: 672px) 100vw, 672px"
                   />
-                </a>
-              ))}
+                );
+
+                if (banner.direct) {
+                  return (
+                    <a
+                      key={banner.src}
+                      href={banner.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ transitionDelay: `${i * 60}ms` }}
+                      className={className}
+                    >
+                      {image}
+                    </a>
+                  );
+                }
+
+                return (
+                  <button
+                    key={banner.src}
+                    onClick={() => setLeadCapture({ service: banner.service, href: banner.href })}
+                    style={{ transitionDelay: `${i * 60}ms` }}
+                    className={`${className} text-left`}
+                  >
+                    {image}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>

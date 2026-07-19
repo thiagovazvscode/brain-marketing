@@ -28,7 +28,7 @@ export function FinalCTA() {
         aria-hidden="true"
       />
       <div
-        className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2D1B4E]/40 blur-[160px]"
+        className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1c2230]/40 blur-[160px]"
         aria-hidden="true"
       />
 
