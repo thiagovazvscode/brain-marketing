@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import {
   ArrowRight,
   BarChart2,
   Check,
   ClipboardList,
+  LayoutDashboard,
   MapPin,
   Palette,
   Rocket,
@@ -84,6 +86,48 @@ const included = [
 
 const notIncluded = [
   "Verba de anúncios (recomendamos a partir de R$500/mês, investida diretamente no Meta Ads)",
+];
+
+const dashboardFeatures = [
+  "Acompanhe investimento, alcance, cliques e leads gerados em tempo real",
+  "Filtre por período e por campanha",
+  "Acesso liberado para você e para a equipe MV, sem custo adicional",
+];
+
+const bioBullets = [
+  "Mais de 15 anos de atuação no mercado imobiliário",
+  "Estruturação de times comerciais e de marketing do zero",
+  "Condução de projetos de grande porte, do diagnóstico à execução",
+  "Consultoria e diagnóstico comercial para operações imobiliárias",
+  "Treinamento de equipes de vendas e atendimento",
+  "Contratação e gestão de agências de marketing atuando lado a lado com a operação",
+];
+
+const faqItems = [
+  {
+    q: "Preciso ter site próprio para rodar as campanhas?",
+    a: "Não. As campanhas podem direcionar direto para o WhatsApp da equipe MV, sem depender de um site.",
+  },
+  {
+    q: "Quanto tempo até os primeiros resultados aparecerem?",
+    a: "As campanhas ficam no ar em até 15 dias após a aprovação da proposta, com os primeiros leads chegando ainda no primeiro mês.",
+  },
+  {
+    q: "Como funciona isso de 'até 2 campanhas ativas'?",
+    a: "Mantemos sempre até 2 campanhas rodando ao mesmo tempo. Quando uma encerra o ciclo, já ativamos a próxima — o tráfego nunca para.",
+  },
+  {
+    q: "A verba de anúncio é paga para a Brain?",
+    a: "Não. A verba é paga direto na plataforma (Meta Ads), separada do valor de gestão — total transparência sobre quanto está sendo investido em mídia.",
+  },
+  {
+    q: "Como acompanho os resultados?",
+    a: "Você recebe acesso a um dashboard próprio, com filtros por período e campanha, além do relatório mensal.",
+  },
+  {
+    q: "Posso cancelar quando quiser?",
+    a: "Sim. Não há fidelidade — basta avisar com antecedência, conforme combinado no contrato.",
+  },
 ];
 
 export default function PropostaMvImoveisPage() {
@@ -238,6 +282,47 @@ export default function PropostaMvImoveisPage() {
         </div>
       </section>
 
+      {/* SEÇÃO 4B — DASHBOARD GRATUITO */}
+      <section className="px-6 py-16 lg:px-10">
+        <div className="mx-auto max-w-5xl">
+          <MotionReveal>
+            <GlowCard
+              className="grid gap-8 p-8 lg:grid-cols-[auto_1fr] lg:items-center lg:p-10"
+              glowColor="rgba(56, 189, 248,0.18)"
+            >
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-brand-magenta/30 text-brand-magenta">
+                <LayoutDashboard className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <div>
+                <span className={badgeClass}>Diferencial Brain · Sem custo adicional</span>
+                <h3 className="mt-4 font-display text-2xl font-semibold text-white">
+                  Dashboard de performance, de graça
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-400">
+                  Você acompanha o investimento e os resultados das campanhas
+                  em tempo real, direto de um painel exclusivo — sem depender
+                  de relatório manual.
+                </p>
+                <ul className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {dashboardFeatures.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2.5 text-sm text-gray-300"
+                    >
+                      <Check
+                        className="mt-0.5 h-4 w-4 shrink-0 text-brand-magenta"
+                        aria-hidden="true"
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </GlowCard>
+          </MotionReveal>
+        </div>
+      </section>
+
       {/* SEÇÃO 5 — COMO TRABALHAMOS */}
       <section className="relative overflow-hidden px-6 py-20 lg:px-10">
         <div
@@ -301,6 +386,69 @@ export default function PropostaMvImoveisPage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO 5B — QUEM CONDUZ O PROJETO */}
+      <section className="px-6 py-20 lg:px-10">
+        <div className="mx-auto max-w-5xl">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[280px_1fr] lg:gap-14">
+            <MotionReveal direction="left">
+              <div
+                className="relative mx-auto w-full max-w-[280px] overflow-hidden rounded-3xl"
+                style={{ height: "320px", boxShadow: "0 0 60px rgba(37, 99, 235, 0.15)" }}
+              >
+                <Image
+                  src="/images/fundador.webp"
+                  alt="Thiago Vaz, fundador e estrategista da Brain Marketing & Performance"
+                  fill
+                  sizes="280px"
+                  style={{ objectFit: "cover", objectPosition: "center top" }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0"
+                  style={{ background: "linear-gradient(to top, #000000 0%, transparent 40%)" }}
+                />
+              </div>
+            </MotionReveal>
+
+            <MotionReveal delay={0.1} direction="right">
+              <span className={badgeClass}>Quem conduz o seu projeto</span>
+              <h3 className="mt-5 font-display text-2xl font-semibold text-white md:text-3xl">
+                Thiago Vaz
+              </h3>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-primary">
+                Fundador &amp; Estrategista da Brain
+              </p>
+              <p className="mt-5 max-w-xl text-sm leading-relaxed text-gray-400">
+                Antes de fundar a Brain, passei mais de 15 anos dentro do
+                mercado imobiliário — como diretor comercial, gestor e
+                consultor. Estruturei times do zero, conduzi projetos grandes
+                e já estive do outro lado da mesa: contratando e cobrando
+                resultado de agência de marketing.
+              </p>
+              <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+                {bioBullets.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-2.5 text-sm text-gray-300"
+                  >
+                    <Check
+                      className="mt-0.5 h-4 w-4 shrink-0 text-brand-primary"
+                      aria-hidden="true"
+                    />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-6 max-w-xl text-sm italic leading-relaxed text-gray-500">
+                Hoje aplico essa vivência prática em cada proposta da Brain —
+                não é teoria de agência, é experiência de quem já rodou a
+                operação por dentro.
+              </p>
+            </MotionReveal>
           </div>
         </div>
       </section>
@@ -374,6 +522,39 @@ export default function PropostaMvImoveisPage() {
                 </ul>
               </div>
             </MotionReveal>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO 6B — FAQ */}
+      <section className="px-6 py-20 lg:px-10">
+        <div className="mx-auto max-w-4xl">
+          <MotionReveal>
+            <span className={badgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
+              Perguntas frequentes
+            </span>
+          </MotionReveal>
+
+          <MotionReveal delay={0.08}>
+            <h2 className="mt-6 font-display text-balance text-3xl font-medium leading-[1.1] text-white sm:text-4xl">
+              Antes de decidir, tira aqui as dúvidas mais comuns.
+            </h2>
+          </MotionReveal>
+
+          <div className="mt-10 grid gap-4">
+            {faqItems.map((item, index) => (
+              <MotionReveal key={item.q} delay={0.05 + index * 0.05}>
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+                  <h3 className="font-display text-base font-semibold text-white">
+                    {item.q}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-400">
+                    {item.a}
+                  </p>
+                </div>
+              </MotionReveal>
+            ))}
           </div>
         </div>
       </section>
