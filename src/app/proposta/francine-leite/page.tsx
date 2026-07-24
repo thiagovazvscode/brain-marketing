@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   AppWindow,
   ArrowRight,
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { GlowCard } from "@/components/ui/GlowCard";
 import { Logo } from "@/components/ui/Logo";
 import { MotionReveal } from "@/components/ui/MotionReveal";
+import { FounderBio } from "@/components/proposals/FounderBio";
 
 const whatsappMessage =
   "Olá Thiago, quero conversar sobre a proposta para Francine Leite";
@@ -79,15 +79,6 @@ const brokerAppsFeatures = [
   "CRM kanban para organizar seus leads e atendimentos",
   "Vitrine digital para apresentar seus imóveis",
   "Dashboard do Meta Ads integrado, com seus resultados em tempo real",
-];
-
-const bioBullets = [
-  "Mais de 15 anos de atuação no mercado imobiliário",
-  "Estruturação de times comerciais e de marketing do zero",
-  "Condução de projetos de grande porte, do diagnóstico à execução",
-  "Consultoria e diagnóstico comercial para operações imobiliárias",
-  "Treinamento de equipes de vendas e atendimento",
-  "Contratação e gestão de agências de marketing atuando lado a lado com a operação",
 ];
 
 const included = [
@@ -399,67 +390,7 @@ export default function PropostaFrancineLeitePage() {
       </section>
 
       {/* SEÇÃO 5B — QUEM CONDUZ O PROJETO */}
-      <section className="px-6 py-20 lg:px-10">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[280px_1fr] lg:gap-14">
-            <MotionReveal direction="left">
-              <div
-                className="relative mx-auto w-full max-w-[280px] overflow-hidden rounded-3xl"
-                style={{ height: "320px", boxShadow: "0 0 60px rgba(37, 99, 235, 0.15)" }}
-              >
-                <Image
-                  src="/images/fundador.webp"
-                  alt="Thiago Vaz, fundador e estrategista da Brain Marketing & Performance"
-                  fill
-                  sizes="280px"
-                  style={{ objectFit: "cover", objectPosition: "center top" }}
-                />
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0"
-                  style={{ background: "linear-gradient(to top, #000000 0%, transparent 40%)" }}
-                />
-              </div>
-            </MotionReveal>
-
-            <MotionReveal delay={0.1} direction="right">
-              <span className={badgeClass}>Quem conduz o seu projeto</span>
-              <h3 className="mt-5 font-display text-2xl font-semibold text-white md:text-3xl">
-                Thiago Vaz
-              </h3>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-primary">
-                Fundador &amp; Estrategista da Brain
-              </p>
-              <p className="mt-5 max-w-xl text-sm leading-relaxed text-gray-400">
-                Antes de fundar a Brain, passei mais de 15 anos dentro do
-                mercado imobiliário — como diretor comercial, gestor e
-                consultor. Estruturei times do zero, conduzi projetos grandes
-                e já estive do outro lado da mesa: contratando e cobrando
-                resultado de agência de marketing.
-              </p>
-              <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-                {bioBullets.map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-start gap-2.5 text-sm text-gray-300"
-                  >
-                    <Check
-                      className="mt-0.5 h-4 w-4 shrink-0 text-brand-primary"
-                      aria-hidden="true"
-                    />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-6 max-w-xl text-sm italic leading-relaxed text-gray-500">
-                Hoje aplico essa vivência prática em cada proposta da Brain —
-                não é teoria de agência, é experiência de quem já rodou a
-                operação por dentro.
-              </p>
-            </MotionReveal>
-          </div>
-        </div>
-      </section>
+      <FounderBio />
 
       {/* SEÇÃO 6 — INVESTIMENTO */}
       <section className="relative overflow-hidden px-6 py-24 lg:px-10">
