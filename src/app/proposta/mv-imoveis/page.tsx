@@ -66,26 +66,46 @@ const processSteps = [
 ];
 
 const paidTrafficDeliverables = [
-  "Gestão completa das campanhas no Meta Ads (Instagram e Facebook)",
-  "Até 2 campanhas ativas simultaneamente, sempre renovadas ao final do ciclo",
-  "Segmentação por bairro, perfil de comprador e tipo de imóvel",
-  "Criação de artes e textos para os anúncios",
-  "Conexão direta com o WhatsApp da equipe MV",
-  "Relatório mensal com métricas reais",
-  "Otimizações contínuas",
+  "Criação e configuração de campanhas do zero, com estrutura ABO otimizada para imóveis",
+  "Até 3 campanhas de imóveis ativas simultaneamente",
+  "Segmentação estratégica por bairro, perfil de comprador e tipo de imóvel",
+  "Criação de copies e artes para os anúncios",
+  "Configuração de formulários de qualificação de leads",
+  "Monitoramento diário das métricas e otimização contínua",
+  "Relatório quinzenal de performance",
+  "Consultoria estratégica para lançamentos",
+];
+
+const scopeDetails = [
+  { label: "Plataforma", value: "Meta Ads (Facebook + Instagram)" },
+  { label: "Campanhas simultâneas", value: "Até 3 imóveis" },
+  { label: "Verba de mídia", value: "Gerenciada diretamente pela MV Imóveis" },
+  { label: "Otimização", value: "Diária" },
+  { label: "Relatórios", value: "Quinzenal" },
+  { label: "Suporte", value: "WhatsApp em horário comercial" },
+];
+
+const resultStats = [
+  { value: "6%+", label: "CTR médio", note: "mercado padrão: 1–2%" },
+  { value: "R$5–7", label: "Custo médio por lead", note: "imóveis de alto padrão" },
+  { value: "R$6–18", label: "CPM médio", note: "altamente competitivo para Belém" },
 ];
 
 const included = [
-  "Gestão de até 2 campanhas ativas simultaneamente no Meta Ads",
-  "Renovação contínua das campanhas ao final de cada ciclo",
-  "Segmentação por bairro e perfil de comprador em Belém",
-  "Criação de criativos e textos para os anúncios",
-  "Campanhas conectadas ao WhatsApp da equipe MV",
-  "Relatório mensal de performance",
+  "Criação e configuração de campanhas do zero",
+  "Estrutura ABO otimizada para imóveis",
+  "Segmentação estratégica por perfil de comprador",
+  "Criação de copies e textos dos anúncios",
+  "Configuração de formulários de qualificação de leads",
+  "Monitoramento diário e otimização contínua das campanhas",
+  "Relatório quinzenal de performance",
+  "Consultoria estratégica para lançamentos",
 ];
 
 const notIncluded = [
-  "Verba de anúncios (recomendamos a partir de R$500/mês, investida diretamente no Meta Ads)",
+  "Verba de mídia (paga diretamente pela MV Imóveis)",
+  "Produção de vídeos e fotos dos imóveis",
+  "Criação de landing pages",
 ];
 
 const dashboardFeatures = [
@@ -104,16 +124,16 @@ const faqItems = [
     a: "As campanhas ficam no ar em até 15 dias após a aprovação da proposta, com os primeiros leads chegando ainda no primeiro mês.",
   },
   {
-    q: "Como funciona isso de 'até 2 campanhas ativas'?",
-    a: "Mantemos sempre até 2 campanhas rodando ao mesmo tempo. Quando uma encerra o ciclo, já ativamos a próxima — o tráfego nunca para.",
+    q: "Como funciona isso de 'até 3 campanhas simultâneas'?",
+    a: "Mantemos sempre até 3 campanhas de imóveis diferentes rodando ao mesmo tempo, com otimização diária. Quando uma encerra o ciclo, já ativamos a próxima — o tráfego nunca para.",
   },
   {
     q: "A verba de anúncio é paga para a Brain?",
-    a: "Não. A verba é paga direto na plataforma (Meta Ads), separada do valor de gestão — total transparência sobre quanto está sendo investido em mídia.",
+    a: "Não. A verba de mídia é paga direto na plataforma (Meta Ads) pela MV Imóveis, separada do valor de gestão — total transparência sobre quanto está sendo investido em mídia.",
   },
   {
     q: "Como acompanho os resultados?",
-    a: "Você recebe acesso a um dashboard próprio, com filtros por período e campanha, além do relatório mensal.",
+    a: "Você recebe acesso a um dashboard próprio, com filtros por período e campanha, além do relatório quinzenal.",
   },
   {
     q: "Posso cancelar quando quiser?",
@@ -264,11 +284,51 @@ export default function PropostaMvImoveisPage() {
                     </li>
                   ))}
                 </ul>
+
+                <dl className="mt-8 grid gap-x-6 gap-y-4 border-t border-white/[0.06] pt-6 sm:grid-cols-2">
+                  {scopeDetails.map((item) => (
+                    <div key={item.label}>
+                      <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
+                        {item.label}
+                      </dt>
+                      <dd className="mt-1 text-sm text-gray-300">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
                 <p className="mt-6 text-xs leading-relaxed text-gray-500">
-                  A verba de anúncios não está inclusa no valor da gestão.
+                  A verba de mídia não está inclusa no valor da gestão.
                 </p>
               </GlowCard>
             </MotionReveal>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO 4A2 — RESULTADOS COMPROVADOS */}
+      <section className="px-6 py-4 lg:px-10">
+        <div className="mx-auto max-w-5xl">
+          <MotionReveal>
+            <span className={badgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
+              Resultados comprovados
+            </span>
+          </MotionReveal>
+
+          <div className="mt-8 grid gap-5 sm:grid-cols-3">
+            {resultStats.map((stat, index) => (
+              <MotionReveal key={stat.label} delay={0.08 + index * 0.08}>
+                <div className="h-full rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 text-center">
+                  <p className="font-display text-3xl font-bold text-white">
+                    {stat.value}
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-gray-300">
+                    {stat.label}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">{stat.note}</p>
+                </div>
+              </MotionReveal>
+            ))}
           </div>
         </div>
       </section>
@@ -405,8 +465,11 @@ export default function PropostaMvImoveisPage() {
               Investimento mensal
             </p>
             <p className="mt-4 font-display text-5xl font-bold text-white sm:text-6xl">
-              R$ 1.000
+              R$ 2.000
               <span className="text-2xl font-medium text-gray-400">/mês</span>
+            </p>
+            <p className="mt-3 text-sm text-gray-500">
+              Gestão de até 3 campanhas simultâneas
             </p>
           </MotionReveal>
 
