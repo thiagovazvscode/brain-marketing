@@ -181,6 +181,12 @@ export default function PropostaMvImoveisPage() {
             </h1>
           </MotionReveal>
 
+          <MotionReveal delay={0.12}>
+            <p className="mt-3 text-sm font-medium tracking-wide text-gray-500">
+              A/C Marcelo Vidal
+            </p>
+          </MotionReveal>
+
           <MotionReveal delay={0.16}>
             <p className="mx-auto mt-6 max-w-2xl text-balance text-base leading-relaxed text-gray-400 md:text-lg">
               Uma estrutura de tráfego pago pensada para gerar leads
