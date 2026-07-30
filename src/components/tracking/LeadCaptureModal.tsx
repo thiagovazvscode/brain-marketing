@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { Loader2, MessageCircle, X } from "lucide-react";
+import { useTrackingSession } from "@/hooks/useTrackingSession";
+import type { LeadSource } from "@/types/tracking";
 
 type Status = "idle" | "submitting" | "success";
 
@@ -9,16 +11,21 @@ export function LeadCaptureModal({
   service,
   whatsappHref,
   onClose,
+  sourceType,
+  sourceElementId,
 }: {
   service: string;
   whatsappHref: string;
   onClose: () => void;
+  sourceType: LeadSource;
+  sourceElementId?: string;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [status, setStatus] = useState<Status>("idle");
+  const { getSessionId, getUtm } = useTrackingSession();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,8 +38,28 @@ export function LeadCaptureModal({
     if (Object.keys(nextErrors).length > 0) return;
 
     setStatus("submitting");
-    // TODO: substituir por POST /api/leads quando o backend estiver conectado.
-    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    // A conversa no WhatsApp é o objetivo real desta tela — uma falha ao salvar
+    // o lead no CRM nunca pode impedir o visitante de chegar lá.
+    try {
+      await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone,
+          email: email.trim() || undefined,
+          sourceType,
+          sourceElementId,
+          service,
+          sessionId: getSessionId(),
+          ...getUtm(),
+        }),
+      });
+    } catch {
+      // ignorado de propósito
+    }
+
     setStatus("success");
   }
 

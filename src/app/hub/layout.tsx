@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PixelScripts } from "@/components/tracking/PixelScripts";
 
 export const metadata: Metadata = {
   title: "Brain Marketing & Performance · Links",
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 export default function HubLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#000000] text-white">
+      <PixelScripts path="/hub" />
       {children}
     </div>
   );

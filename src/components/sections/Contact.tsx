@@ -8,6 +8,7 @@ import { MotionReveal } from "@/components/ui/MotionReveal";
 import { Button } from "@/components/ui/Button";
 import type { ContactFormData, FormStatus } from "@/types";
 import { siteConfig, getWhatsappLink, defaultWhatsappMessage } from "@/config/site";
+import { useTrackingSession } from "@/hooks/useTrackingSession";
 
 const initialForm: ContactFormData = {
   name: "",
@@ -73,6 +74,7 @@ export function Contact() {
   const [form, setForm] = useState<ContactFormData>(initialForm);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<FormStatus>("idle");
+  const { getSessionId, getUtm } = useTrackingSession();
 
   function updateField<K extends keyof ContactFormData>(field: K, value: ContactFormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -91,19 +93,27 @@ export function Contact() {
     setStatus("submitting");
 
     try {
-      // ------------------------------------------------------------------
-      // INTEGRAÇÃO: este projeto não possui backend.
-      // Substitua a simulação abaixo pelo envio real dos dados do formulário,
-      // por exemplo:
-      //   - fetch("/api/contact", { method: "POST", body: JSON.stringify(form) })
-      //     usando uma Route Handler própria (src/app/api/contact/route.ts);
-      //   - um webhook (Zapier, Make, n8n);
-      //   - Supabase (supabase.from("leads").insert(form));
-      //   - Formspree ou serviço similar de formulário como serviço;
-      //   - envio de e-mail transacional (Resend, SendGrid, Nodemailer);
-      //   - redirecionamento complementar para o WhatsApp com os dados.
-      // ------------------------------------------------------------------
-      await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          phone: form.whatsapp,
+          email: form.email,
+          sourceType: "homepage-contact",
+          service: form.service,
+          sessionId: getSessionId(),
+          ...getUtm(),
+          metadata: {
+            company: form.company,
+            segment: form.segment,
+            investment: form.investment,
+            message: form.message,
+          },
+        }),
+      });
+
+      if (!response.ok) throw new Error("lead submission failed");
 
       setStatus("success");
       setForm(initialForm);

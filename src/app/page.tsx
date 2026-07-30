@@ -1,3 +1,4 @@
+import { PixelScripts } from "@/components/tracking/PixelScripts";
 import { Hero } from "@/components/sections/Hero";
 import { Marquee } from "@/components/sections/Marquee";
 import { About } from "@/components/sections/About";
@@ -15,6 +16,7 @@ import { Contact } from "@/components/sections/Contact";
 export default function Home() {
   return (
     <>
+      <PixelScripts path="/" />
       <Hero />
       <Marquee />
       <About />

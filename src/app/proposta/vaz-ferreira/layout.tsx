@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PixelScripts } from "@/components/tracking/PixelScripts";
 
 export const metadata: Metadata = {
   title: "Proposta Comercial · Vaz Ferreira Advogados",
@@ -28,5 +29,10 @@ export default function VazFerreiraPropostaLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return (
+    <>
+      <PixelScripts path="/proposta/vaz-ferreira" />
+      {children}
+    </>
+  );
 }

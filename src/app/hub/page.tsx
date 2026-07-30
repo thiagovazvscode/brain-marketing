@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { LeadCaptureModal } from "@/components/tracking/LeadCaptureModal";
+import { useTrackingSession } from "@/hooks/useTrackingSession";
 
 /* ══════════════════════════════════════════════════
    QUIZ CHATBOT
@@ -107,6 +108,33 @@ function calcResult(answers: number[]): Result {
   };
 }
 
+async function startQuizSession(sessionId: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/track/quiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "start", sessionId }),
+    });
+    const data = await res.json();
+    return typeof data.quizSessionId === "string" ? data.quizSessionId : null;
+  } catch {
+    return null;
+  }
+}
+
+function sendQuizEvent(payload: Record<string, unknown>) {
+  try {
+    fetch("/api/track/quiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // tracking nunca pode travar o quiz
+  }
+}
+
 function QuizModal({
   onClose,
   onRequestCapture,
@@ -118,15 +146,37 @@ function QuizModal({
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<Result | null>(null);
   const [animating, setAnimating] = useState(false);
+  const [quizSessionId, setQuizSessionId] = useState<string | null>(null);
+  const { trackClick, getSessionId } = useTrackingSession();
+
+  useEffect(() => {
+    let active = true;
+    startQuizSession(getSessionId()).then((id) => {
+      if (active) setQuizSessionId(id);
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function choose(idx: number) {
     if (animating) return;
+    trackClick(`quiz-step-${step}-opt-${idx}`);
+    if (quizSessionId) {
+      // step é 1-based aqui (perguntas respondidas), para distinguir de lastStep=0 (nenhuma resposta ainda).
+      sendQuizEvent({ event: "step", quizSessionId, step: step + 1, answerIndex: idx });
+    }
     const next = [...answers, idx];
     setAnimating(true);
     setTimeout(() => {
       setAnimating(false);
       if (step + 1 >= STEPS.length) {
-        setResult(calcResult(next));
+        const computed = calcResult(next);
+        setResult(computed);
+        if (quizSessionId) {
+          sendQuizEvent({ event: "complete", quizSessionId, resultService: computed.title });
+        }
       } else {
         setAnswers(next);
         setStep((s) => s + 1);
@@ -202,6 +252,7 @@ function QuizModal({
                   href={result.href}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackClick("quiz-cta")}
                   className="block w-full rounded-2xl bg-gradient-to-r from-blue-600 to-sky-600 py-4 text-sm font-black text-white shadow-lg shadow-sky-500/25 transition hover:opacity-90 active:scale-[0.98]"
                 >
                   Quero conhecer →
@@ -209,6 +260,7 @@ function QuizModal({
               ) : (
                 <button
                   onClick={() => {
+                    trackClick("quiz-cta");
                     onRequestCapture(result.title, result.href);
                     onClose();
                   }}
@@ -252,6 +304,7 @@ function useScrollReveal() {
 }
 
 const BANNERS: {
+  id: string;
   src: string;
   alt: string;
   href: string;
@@ -260,36 +313,42 @@ const BANNERS: {
   direct?: boolean;
 }[] = [
   {
+    id: "banner-incorporadoras",
     src: "/images/hub/banner-incorporadoras.png",
     alt: "Tráfego Pago para Incorporadoras — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha incorporadora. Quero saber mais sobre os serviços da Brain Marketing."),
     service: "Tráfego Pago para Incorporadoras",
   },
   {
+    id: "banner-imobiliarias",
     src: "/images/hub/banner-imobiliarias.png",
     alt: "Tráfego Pago para Imobiliárias — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha imobiliária. Quero saber mais sobre os serviços da Brain Marketing."),
     service: "Tráfego Pago para Imobiliárias",
   },
   {
+    id: "banner-corretores",
     src: "/images/hub/banner-corretores.png",
     alt: "Tráfego Pago para Corretores Autônomos — Brain Marketing",
     href: wa("Olá! Sou corretor autônomo e tenho interesse em tráfego pago. Quero saber mais sobre os serviços da Brain Marketing."),
     service: "Tráfego Pago para Corretores Autônomos",
   },
   {
+    id: "banner-empresas",
     src: "/images/hub/banner-empresas.png",
     alt: "Tráfego Pago para Empresas — Brain Marketing",
     href: wa("Olá! Tenho interesse em tráfego pago para minha empresa. Quero saber mais sobre os serviços da Brain Marketing."),
     service: "Tráfego Pago para Empresas",
   },
   {
+    id: "banner-audiovisual",
     src: "/images/hub/banner-audiovisual.png",
     alt: "Audiovisual Imobiliário — Drone e Câmera Profissional — Brain Marketing",
     href: wa("Olá! Tenho interesse nos serviços de audiovisual da Brain Marketing. Quero saber mais."),
     service: "Audiovisual Imobiliário",
   },
   {
+    id: "banner-brokerapps",
     src: "/images/hub/banner-brokerapps.png",
     alt: "BrokerApps — Do Lead à Venda, Tudo em Uma Única Plataforma",
     href: "https://brokerapps.com.br",
@@ -298,6 +357,7 @@ const BANNERS: {
     direct: true,
   },
   {
+    id: "banner-diagnostico",
     src: "/images/hub/banner-diagnostico.png",
     alt: "Diagnóstico Comercial — Brain Marketing",
     href: wa("Olá! Quero agendar um diagnóstico comercial com a Brain Marketing."),
@@ -308,19 +368,29 @@ const BANNERS: {
 export default function HubPage() {
   useScrollReveal();
   const [quizOpen, setQuizOpen] = useState(false);
-  const [leadCapture, setLeadCapture] = useState<{ service: string; href: string } | null>(null);
+  const [leadCapture, setLeadCapture] = useState<{
+    service: string;
+    href: string;
+    sourceType: "banner" | "quiz-cta";
+    sourceElementId?: string;
+  } | null>(null);
+  const { trackClick } = useTrackingSession();
   return (
     <>
       {quizOpen && (
         <QuizModal
           onClose={() => setQuizOpen(false)}
-          onRequestCapture={(service, href) => setLeadCapture({ service, href })}
+          onRequestCapture={(service, href) =>
+            setLeadCapture({ service, href, sourceType: "quiz-cta", sourceElementId: "quiz-cta" })
+          }
         />
       )}
       {leadCapture && (
         <LeadCaptureModal
           service={leadCapture.service}
           whatsappHref={leadCapture.href}
+          sourceType={leadCapture.sourceType}
+          sourceElementId={leadCapture.sourceElementId}
           onClose={() => setLeadCapture(null)}
         />
       )}
@@ -509,7 +579,10 @@ export default function HubPage() {
                 🔔
               </span>
               <button
-                onClick={() => setQuizOpen(true)}
+                onClick={() => {
+                  trackClick("quiz-trigger");
+                  setQuizOpen(true);
+                }}
                 className="block w-full cursor-pointer rounded-2xl bg-gradient-to-r from-blue-900/70 via-sky-900/60 to-blue-900/70 px-5 py-4 text-left backdrop-blur-sm transition hover:from-blue-800/80 hover:via-sky-800/70 hover:to-blue-800/80 active:scale-[0.98]"
               >
                 <div className="flex items-center gap-4">
@@ -557,6 +630,7 @@ export default function HubPage() {
                       href={banner.href}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => trackClick(banner.id)}
                       style={{ transitionDelay: `${i * 60}ms` }}
                       className={className}
                     >
@@ -568,7 +642,15 @@ export default function HubPage() {
                 return (
                   <button
                     key={banner.src}
-                    onClick={() => setLeadCapture({ service: banner.service, href: banner.href })}
+                    onClick={() => {
+                      trackClick(banner.id);
+                      setLeadCapture({
+                        service: banner.service,
+                        href: banner.href,
+                        sourceType: "banner",
+                        sourceElementId: banner.id,
+                      });
+                    }}
                     style={{ transitionDelay: `${i * 60}ms` }}
                     className={`${className} text-left`}
                   >
@@ -586,6 +668,7 @@ export default function HubPage() {
             href={wa("Olá! Vi o link da Brain Marketing e quero saber mais sobre os serviços.")}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackClick("whatsapp-footer")}
             className="inline-flex items-center gap-2 rounded-2xl border border-[#25D366]/20 bg-[#25D366]/10 px-6 py-3 text-sm font-bold text-[#25D366] transition hover:bg-[#25D366]/20"
           >
             <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">

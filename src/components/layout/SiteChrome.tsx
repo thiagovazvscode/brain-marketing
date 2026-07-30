@@ -1,16 +1,26 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { useTrackingSession } from "@/hooks/useTrackingSession";
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { trackPageView } = useTrackingSession();
+
+  useEffect(() => {
+    if (pathname?.startsWith("/admin")) return;
+    trackPageView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   const isClean =
     pathname?.startsWith("/proposta") ||
     pathname?.startsWith("/hub") ||
-    pathname?.startsWith("/admin");
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/briefing");
 
   if (isClean) {
     return <>{children}</>;
