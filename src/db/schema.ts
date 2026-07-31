@@ -107,3 +107,104 @@ export const clientBriefings = pgTable("client_briefings", {
   payload: jsonb("payload").notNull(),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
+
+// ── Plataforma de operação (specs/client-workspace) ─────────────────────
+
+export const clientEngagementStatusEnum = pgEnum("client_engagement_status", [
+  "ativo",
+  "pausado",
+  "encerrado",
+]);
+
+const DEFAULT_METHOD_STAGES = [
+  "raio-x",
+  "direcao",
+  "estrutura",
+  "motor-de-aquisicao",
+  "curva-de-otimizacao",
+];
+
+// Catálogo de produtos como TABELA, não enum — produto é entidade de negócio
+// (nome, preço, ativo/inativo mudam), adicionar um novo é INSERT, não migration.
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  shortDescription: text("short_description"),
+  category: text("category"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isEntryProduct: boolean("is_entry_product").notNull().default(false),
+  defaultStages: jsonb("default_stages").$type<string[]>().notNull().default(DEFAULT_METHOD_STAGES),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Engajamento = "contrato vivo": qual produto, em que estágio do Método Brain,
+// com que status. currentStage é text validado contra src/lib/method-stages.ts
+// (não pgEnum): é metodologia estável da marca, mas mantemos o mesmo cuidado
+// de não travar em enum de banco.
+export const clientProducts = pgTable("client_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  status: clientEngagementStatusEnum("status").notNull().default("ativo"),
+  currentStage: text("current_stage").notNull().default("raio-x"),
+  startedAt: date("started_at").notNull().defaultNow(),
+  endedAt: date("ended_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Auditoria de transição de estágio — sem isso não dá pra medir tempo de
+// ciclo nem mostrar evolução pro cliente numa reunião.
+export const clientStageHistory = pgTable("client_stage_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientProductId: uuid("client_product_id").notNull().references(() => clientProducts.id),
+  fromStage: text("from_stage"),
+  toStage: text("to_stage").notNull(),
+  note: text("note"),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+});
+
+// Links próprios (bio do Instagram, WhatsApp, anúncio) com redirect + tracking.
+export const trackedLinks = pgTable("tracked_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  destinationUrl: text("destination_url").notNull(),
+  campaign: text("campaign"),
+  ownerClientId: uuid("owner_client_id").references(() => clients.id),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const linkClicks = pgTable("link_clicks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  linkId: uuid("link_id").notNull().references(() => trackedLinks.id),
+  sessionId: text("session_id"),
+  referrer: text("referrer"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Diagnóstico: transforma o briefing em nota por pilar + recomendação de
+// produto justificada (não uma lista genérica de "o que falta comprar").
+export const clientDiagnostics = pgTable("client_diagnostics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  answers: jsonb("answers"),
+  scores: jsonb("scores").$type<{
+    aquisicao: number;
+    posicionamento: number;
+    processoComercial: number;
+    tecnologia: number;
+  }>(),
+  bottleneck: text("bottleneck"),
+  recommendations: jsonb("recommendations").$type<{ productSlug: string; reason: string }[]>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

@@ -1,109 +1,94 @@
-# Tasks — Workspace de Cliente
+# Tasks — Plataforma de Operação da Brain
 
-Banco já provisionado e migrado (`specs/admin-crm-analytics`) — sem bloqueio de
-infra. Ordem pensada para destravar o gap mais doloroso primeiro: **o Bloco 1 não
-depende de nenhuma tabela nova** (usa só `clients`, que já existe), então pode ir
-pra produção antes de qualquer outro bloco estar pronto.
+Bloco 1 (cadastro manual de cliente) já em produção, sem mudanças. A partir
+daqui, nova arquitetura completa — schema primeiro (todos os módulos juntos,
+uma migration só), depois seed de demonstração (pra enxergar UI com dado
+real), depois API+UI módulo por módulo, depois dashboard, depois conversão
+para Server Components.
 
-## 1. Cadastro manual de cliente (prioridade máxima — sem dependência de schema novo)
+## 0. Schema de todos os módulos
 
-- [ ] `POST /api/admin/clients` — cria cliente (nome, whatsapp, enteredAt; slug
-      gerado a partir do nome, rejeita duplicado).
-- [ ] `PATCH /api/admin/clients/[slug]` — edita dados básicos.
-- [ ] Adicionar coluna `entered_at` (nullable) em `clients` — única mudança de
-      schema deste bloco, aditiva, não quebra `client_briefings` nem o `GET`
-      que já existe.
-- [ ] `src/components/admin/ClientForm.tsx`.
-- [ ] Botão "Novo cliente" em `/admin/clients/page.tsx`, abrindo o form.
+- [ ] `products`, `clientProducts` (v2, substitui a versão com enum),
+      `clientStageHistory`, `trackedLinks`, `linkClicks`,
+      `clientDiagnostics` em `src/db/schema.ts`.
+- [ ] `src/lib/method-stages.ts` (constante `METHOD_STAGES`).
+- [ ] `npm run db:generate` + `npm run db:push`.
 
-**Checkpoint**: cadastrar um cliente de teste direto pelo painel, sem passar por
-`/briefing/[slug]`; editar nome/whatsapp/data de entrada e confirmar que
-persiste; tentar criar outro com o mesmo slug e ver o erro esperado.
+**Checkpoint**: `npm run build` passa; 6 tabelas novas no banco.
 
-> Isso já resolve a queixa central ("preciso conseguir cadastrar cliente sem
-> mandar ele preencher formulário") mesmo antes dos blocos abaixo existirem.
+## 1. Seed de demonstração
 
-## 2. Schema das seções restantes
+- [ ] `scripts/seed-demo.ts` + `npm run db:seed:demo` (com `--clean`).
+- [ ] 6 produtos reais (de `src/data/services.ts`).
+- [ ] 7–8 clientes plausíveis, `enteredAt` espalhado em 12 meses.
+- [ ] Engajamentos em estágios variados, 2 travados há semanas.
+- [ ] Diagnósticos com scores variados → recomendações diferentes.
+- [ ] 8–10 links rastreáveis, 90 dias de cliques com tendência de
+      crescimento (bio do Instagram = campeão).
+- [ ] 90 dias de `page_views`/`click_events`, 30–40 leads com UTM coerente,
+      `quiz_sessions` com ~30% de conclusão.
+- [ ] Todo dado de demo é identificável (slugs/sessionIds prefixados
+      `demo-`) para o `--clean` remover com segurança, sem `DROP TABLE`.
 
-- [ ] Adicionar `clientProductTypeEnum`, `clientProductStatusEnum`,
-      `clientProposalStatusEnum`, `clientProposalTypeEnum`,
-      `clientFileCategoryEnum` (incluindo `"acesso"`), `clientRoadmapStatusEnum`
-      e as tabelas `clientProducts`, `clientProposals` (com `proposalType`,
-      `externalLabel`, `externalUrl`), `clientFiles`, `clientRoadmapItems` em
-      `src/db/schema.ts` (ver `design.md` para o código exato — importar
-      `date` de `drizzle-orm/pg-core`).
-- [ ] Criar `src/data/proposals.ts` com o catálogo `KNOWN_PROPOSALS`.
-- [ ] Criar `src/types/client-workspace.ts` com as interfaces de domínio.
-- [ ] Rodar `npm run db:generate` + `npm run db:push`.
+**Checkpoint**: rodar o seed, conferir volumes no banco; rodar `--clean`,
+conferir que só o prefixado `demo-` sumiu.
 
-**Checkpoint**: `npm run build` passa; as 4 tabelas novas + a coluna
-`entered_at` aparecem no banco.
+## 2. Catálogo + engajamento do cliente (Módulos 1 e 2)
 
-## 3. Produtos por cliente (com upsell)
-
+- [ ] `GET /api/admin/products`.
 - [ ] `GET/POST /api/admin/clients/[slug]/products`.
-- [ ] `PATCH /api/admin/clients/[slug]/products/[id]` (status).
-- [ ] `src/components/admin/ClientProductsPanel.tsx` — grupo "contratados" +
-      grupo "oportunidades" (catálogo menos o que está ativo).
-- [ ] Seção "Produtos" em `/admin/clients/[slug]/page.tsx`.
+- [ ] `PATCH /api/admin/clients/[slug]/products/[id]` (status + estágio,
+      grava `client_stage_history` ao mudar estágio).
+- [ ] `ClientProductsPanel.tsx` — contratados (com estágio) + upsell
+      (catálogo menos contratado).
+- [ ] Seção "Produtos" em `/admin/clients/[slug]`.
 
-**Checkpoint**: adicionar um produto a um cliente de teste, pausar, encerrar —
-o produto encerrado volta a aparecer no grupo de oportunidades.
+**Checkpoint**: associar produto a um cliente de teste, avançar estágio 2x,
+conferir `client_stage_history` com as 2 transições.
 
-## 4. Propostas enviadas (site + externa)
+## 3. Links rastreáveis (Módulo 3)
 
-- [ ] `GET/POST /api/admin/clients/[slug]/proposals` — valida por
-      `proposalType`: `"site"` exige `proposalSlug` contra `KNOWN_PROPOSALS`;
-      `"externa"` exige `externalLabel` (`externalUrl` opcional).
-- [ ] `PATCH /api/admin/clients/[slug]/proposals/[id]` (status).
-- [ ] `src/components/admin/ClientProposalForm.tsx` — campo de tipo
-      (site/externa) alterna entre `<select>` de página conhecida e campos de
-      título livre + link.
-- [ ] Seção "Propostas enviadas" em `/admin/clients/[slug]/page.tsx`, com link
-      pra `/proposta/[slug]` (site) ou pro `externalUrl` (externa, se houver).
+- [ ] `GET/POST /api/admin/links`.
+- [ ] `GET /l/[slug]/route.ts` — 302 + log de clique fire-and-forget.
+- [ ] `/admin/links/page.tsx` — ranking, CTR, destino, jornada pós-clique.
+- [ ] Item "Links" no nav do `AdminShell`.
 
-**Checkpoint**: registrar o envio da proposta de MV Imóveis (tipo "site") pro
-cliente de teste, ver o link funcionando; registrar uma proposta "externa"
-(ex: "Proposta PDF enviada por e-mail", sem link) e ver as duas listadas
-corretamente; mudar status de uma delas pra "aceita".
+**Checkpoint**: criar um link de teste, acessar `/l/[slug]`, confirmar
+redirect funcionando e `link_clicks` gravado; matar a query proposital e
+confirmar que o redirect não quebra (fire-and-forget de verdade).
 
-## 5. Arquivos por cliente
+## 4. Diagnóstico (Módulo 4)
 
-- [ ] `GET/POST /api/admin/clients/[slug]/files`.
-- [ ] `DELETE /api/admin/clients/[slug]/files/[id]`.
-- [ ] `src/components/admin/ClientFilesPanel.tsx`.
-- [ ] Seção "Arquivos" em `/admin/clients/[slug]/page.tsx`.
+- [ ] `GET/POST /api/admin/clients/[slug]/diagnostics` (scores,
+      `bottleneck`, `recommendations`).
+- [ ] `ClientDiagnosticPanel.tsx`.
+- [ ] Seção "Diagnóstico" em `/admin/clients/[slug]`, com a recomendação
+      mais recente substituindo a lista genérica de upsell quando houver.
 
-**Checkpoint**: adicionar uma referência de arquivo (link do Drive, por
-exemplo), ver na lista, remover.
+**Checkpoint**: criar diagnóstico com nota baixa em "tecnologia", confirmar
+que a recomendação aponta Broker Apps com justificativa.
 
-## 6. Roadmap/cronograma
+## 5. Dashboard — 3 visões
 
-- [ ] `GET/POST /api/admin/clients/[slug]/roadmap`.
-- [ ] `PATCH /api/admin/clients/[slug]/roadmap/[id]` (status, preenchendo
-      `completedAt` em "feito").
-- [ ] `src/components/admin/ClientRoadmapPanel.tsx`.
-- [ ] Seção "Roadmap" em `/admin/clients/[slug]/page.tsx`.
+- [ ] `npm install recharts`.
+- [ ] `GET /api/admin/dashboard/operacao`, `.../links`, `.../leads`.
+- [ ] `/admin/dashboard/page.tsx` reestruturado em 3 seções, com gráficos
+      de linha/barra do `recharts`.
 
-**Checkpoint**: criar um item, mover pra "em andamento", marcar "feito" e
-confirmar `completedAt` preenchido.
+**Checkpoint**: os 3 números batem com contagem manual no banco (após o
+seed de demonstração).
 
-## 7. Reorganização final da pasta do cliente
+## 6. Conversão para Server Components
 
-- [ ] Reordenar `/admin/clients/[slug]/page.tsx` para a estrutura final: Dados
-      básicos → Produtos → Propostas → Briefings → Arquivos → Roadmap —
-      confirmando visualmente que Briefings deixou de ser "a única coisa que
-      existe" sobre o cliente.
-- [ ] `/admin/clients/page.tsx`: lista passa a mostrar também clientes sem
-      nenhum produto/proposta ainda (recém-cadastrados manualmente), sem
-      tratar isso como estado quebrado.
+- [ ] `/admin/clients/[slug]/page.tsx` e `/admin/dashboard/page.tsx` buscam
+      dado direto via `db` (Server Component), sem `useEffect`/fetch para
+      dado inicial; `"use client"` só nas ilhas interativas.
+- [ ] `loading.tsx` (skeleton) nas duas rotas.
 
-**Checkpoint**: revisão visual completa da pasta de um cliente com dado em
-todas as seções (produto, proposta, briefing, arquivo, roadmap) e de um
-cliente recém-criado com todas as seções vazias, sem erro em nenhum dos dois.
+**Checkpoint**: `/admin/clients/[slug]` mostra conteúdo no primeiro paint
+(sem spinner inicial) com o dado do seed de demonstração.
 
-## Fora desta v1 (mencionar mas não implementar agora)
+## Fora desta versão (adiado, não cancelado)
 
-- Faturamento/MRR/histórico de pagamento (spec anterior, substituído por este).
-- Upload real de arquivo (hoje é só link/referência — ver `design.md`).
-- Notificação automática de roadmap atrasado ou proposta sem resposta.
+- Propostas enviadas, arquivos/pastas, roadmap genérico (spec anterior).
+- Página de gestão do catálogo de produtos (hoje só via seed/SQL direto).

@@ -1,257 +1,239 @@
-# Design — Workspace de Cliente
+# Design — Plataforma de Operação da Brain
 
-## Stack e decisões técnicas
-
-Sem stack nova — reaproveita 100% o que já existe: Neon Postgres + Drizzle ORM,
-sessão de admin via `proxy.ts` (matcher já cobre `/admin/:path*` e
-`/api/admin/:path*`), páginas do admin como client components buscando dados via
-`fetch` em rotas `/api/admin/*`, mesmo padrão de `src/app/api/admin/leads/*` e
-`.../pixels/*` já implementados.
+## Decisões técnicas
 
 | Decisão | Escolha | Motivo |
 |---|---|---|
-| Arquivos do cliente | **link/referência**, não upload binário | implementar upload real exige um provedor de storage (Vercel Blob ou S3), custo recorrente e superfície de segurança (validação de tipo/tamanho de arquivo) — para v1, o dono da agência já guarda os arquivos em algum lugar (Drive, WhatsApp); o sistema só precisa apontar pra lá. Se o volume/uso comprovar necessidade de upload real depois, é uma extensão aditiva (nova coluna ou tabela), não um retrabalho. |
-| Slug de proposta | **texto validado contra uma lista em código**, não FK | páginas de proposta são rotas Next.js estáticas (`src/app/proposta/[slug]/page.tsx`), não registros de banco — não faz sentido uma FK para algo que não é uma tabela. Uma lista centralizada em `src/data/proposals.ts` vira a fonte da verdade tanto para o `<select>` do admin quanto para o link exibido. |
-| Proposta sem página no site | campo `proposalType` ("site" \| "externa") em `client_proposals`, com `proposalSlug`/`externalLabel`/`externalUrl` nullable | confirmado que nem toda proposta é uma página do site (PDF, Google Doc, WhatsApp) — em vez de duas tabelas, uma coluna discriminadora com validação em app-level (não em constraint do banco, pra manter simples) cobre os dois casos numa tabela só |
-| Upsell | **calculado**, não uma linha "não comprado" | o catálogo de produtos é fixo (enum); "oportunidade de upsell" é só "produto do catálogo menos o que o cliente já tem ativo" — calculado na hora de exibir, sem gravar ausência. |
-| Data de entrada do cliente | nova coluna `entered_at` em `clients` | é semanticamente diferente de `created_at` (quando a linha foi criada no banco) — o admin pode estar cadastrando hoje um cliente que entrou há 2 meses. Única mudança aditiva numa tabela que já existe. |
+| Catálogo de produto | tabela `products`, não `pgEnum` | produto muda com frequência de negócio (preço, nome, ativo/inativo) — enum exige migration pra cada ajuste |
+| Estágio do Método | `text` validado contra constante TS (`src/lib/method-stages.ts`, espelha `src/data/method.ts`), não `pgEnum` nem tabela | é metodologia estável da marca (não editável pelo admin no dia a dia como produto é), mas ainda assim evitar o mesmo acoplamento rígido de enum de banco — validação em app-level já é suficiente |
+| Status do engajamento | `pgEnum` (`ativo`/`pausado`/`encerrado`) | conjunto genuinamente fechado e estável, ao contrário de produto/estágio |
+| Links rastreáveis | tabela própria (`tracked_links` + `link_clicks`) + rota pública `/l/[slug]` | mesmo padrão de `/api/track/*` já existente (fire-and-forget, nunca bloqueia o redirect) |
+| Diagnóstico | reaproveita `client_briefings.payload` como matéria-prima; não duplica o schema do briefing | scores/recomendações são um cálculo em cima do que já foi coletado |
+| Renderização do admin | Server Components buscando via `db` direto, `"use client"` só em ilhas interativas | elimina o waterfall fetch-no-cliente medido no diagnóstico |
 
 ## Modelo de dados
 
 ```mermaid
 erDiagram
-    CLIENTS ||--o{ CLIENT_BRIEFINGS : "clientId (já existe)"
+    PRODUCTS ||--o{ CLIENT_PRODUCTS : "productId"
     CLIENTS ||--o{ CLIENT_PRODUCTS : "clientId"
-    CLIENTS ||--o{ CLIENT_PROPOSALS : "clientId"
-    CLIENTS ||--o{ CLIENT_FILES : "clientId"
-    CLIENTS ||--o{ CLIENT_ROADMAP_ITEMS : "clientId"
+    CLIENT_PRODUCTS ||--o{ CLIENT_STAGE_HISTORY : "clientProductId"
+    CLIENTS ||--o{ TRACKED_LINKS : "ownerClientId (nullable)"
+    TRACKED_LINKS ||--o{ LINK_CLICKS : "linkId"
+    CLIENTS ||--o{ CLIENT_DIAGNOSTICS : "clientId"
 
-    CLIENTS {
+    PRODUCTS {
         uuid id PK
         text slug
         text name
-        text whatsapp
-        date enteredAt "novo"
+        text shortDescription
+        text category
+        boolean isActive
+        integer sortOrder
+        boolean isEntryProduct
+        jsonb defaultStages
         timestamp createdAt
+        timestamp updatedAt
     }
     CLIENT_PRODUCTS {
         uuid id PK
         uuid clientId FK
-        text productType
+        uuid productId FK
         text status
+        text currentStage
         date startedAt
+        date endedAt
         text notes
         timestamp createdAt
         timestamp updatedAt
     }
-    CLIENT_PROPOSALS {
+    CLIENT_STAGE_HISTORY {
         uuid id PK
-        uuid clientId FK
-        text proposalType "site | externa"
-        text proposalSlug "nullable, obrigatorio se site"
-        text externalLabel "nullable, obrigatorio se externa"
-        text externalUrl "nullable"
-        date sentAt
-        text status
-        text notes
+        uuid clientProductId FK
+        text fromStage
+        text toStage
+        text note
+        timestamp changedAt
+    }
+    TRACKED_LINKS {
+        uuid id PK
+        text slug
+        text label
+        text destinationUrl
+        text campaign
+        uuid ownerClientId FK
+        boolean isActive
         timestamp createdAt
     }
-    CLIENT_FILES {
+    LINK_CLICKS {
         uuid id PK
-        uuid clientId FK
-        text title
-        text url
-        text category
-        timestamp addedAt
-    }
-    CLIENT_ROADMAP_ITEMS {
-        uuid id PK
-        uuid clientId FK
-        text title
-        text description
-        text status
-        date dueDate
-        timestamp completedAt
+        uuid linkId FK
+        text sessionId
+        text referrer
+        text utmSource
+        text utmMedium
+        text utmCampaign
+        text userAgent
         timestamp createdAt
-        timestamp updatedAt
+    }
+    CLIENT_DIAGNOSTICS {
+        uuid id PK
+        uuid clientId FK
+        jsonb answers
+        jsonb scores
+        text bottleneck
+        jsonb recommendations
+        timestamp createdAt
     }
 ```
 
-`client_briefings` não muda em nada. `clients` ganha uma única coluna aditiva
-(`entered_at`) — não quebra nenhuma leitura existente (`/api/briefings/[client]`,
-`/api/admin/clients`).
+`clients` e `client_briefings` não mudam. O `client_products` desta versão
+**substitui** o desenhado no spec anterior (que usava `clientProductTypeEnum`)
+— sem dado real em produção ainda, não há migração de dados a fazer, só
+trocar a definição antes de rodar `db:push` pela primeira vez.
 
-## Schema Drizzle
-
-### Alteração em `clients` (aditiva)
-
-```typescript
-export const clients = pgTable("clients", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  whatsapp: text("whatsapp"),
-  enteredAt: date("entered_at"), // NOVO — nullable pra não quebrar linhas já existentes
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-```
-
-### Tabelas novas
+## Schema Drizzle (`src/db/schema.ts`)
 
 ```typescript
-export const clientProductTypeEnum = pgEnum("client_product_type", [
-  "trafego_pago",
-  "diagnostico_comercial",
-  "consultoria",
-  "brokerapps",
-  "outro",
-]);
-
-export const clientProductStatusEnum = pgEnum("client_product_status", [
+export const clientEngagementStatusEnum = pgEnum("client_engagement_status", [
   "ativo",
   "pausado",
   "encerrado",
 ]);
 
-export const clientProposalStatusEnum = pgEnum("client_proposal_status", [
-  "enviada",
-  "aceita",
-  "recusada",
-]);
-
-export const clientProposalTypeEnum = pgEnum("client_proposal_type", [
-  "site",
-  "externa",
-]);
-
-export const clientFileCategoryEnum = pgEnum("client_file_category", [
-  "contrato",
-  "material",
-  "entregavel",
-  "acesso",
-  "outro",
-]);
-
-export const clientRoadmapStatusEnum = pgEnum("client_roadmap_status", [
-  "a_fazer",
-  "em_andamento",
-  "feito",
-]);
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  shortDescription: text("short_description"),
+  category: text("category"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isEntryProduct: boolean("is_entry_product").notNull().default(false),
+  defaultStages: jsonb("default_stages").$type<string[]>().notNull().default(sql`'["raio-x","direcao","estrutura","motor-de-aquisicao","curva-de-otimizacao"]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 export const clientProducts = pgTable("client_products", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id").notNull().references(() => clients.id),
-  productType: clientProductTypeEnum("product_type").notNull(),
-  status: clientProductStatusEnum("status").notNull().default("ativo"),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  status: clientEngagementStatusEnum("status").notNull().default("ativo"),
+  currentStage: text("current_stage").notNull().default("raio-x"),
   startedAt: date("started_at").notNull().defaultNow(),
+  endedAt: date("ended_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const clientProposals = pgTable("client_proposals", {
+export const clientStageHistory = pgTable("client_stage_history", {
   id: uuid("id").primaryKey().defaultRandom(),
-  clientId: uuid("client_id").notNull().references(() => clients.id),
-  proposalType: clientProposalTypeEnum("proposal_type").notNull().default("site"),
-  // "site": obrigatório, validado em app-level contra src/data/proposals.ts
-  proposalSlug: text("proposal_slug"),
-  // "externa": título livre obrigatório (ex: "Proposta PDF enviada por e-mail")
-  externalLabel: text("external_label"),
-  externalUrl: text("external_url"),
-  sentAt: date("sent_at").notNull().defaultNow(),
-  status: clientProposalStatusEnum("status").notNull().default("enviada"),
-  notes: text("notes"),
+  clientProductId: uuid("client_product_id").notNull().references(() => clientProducts.id),
+  fromStage: text("from_stage"),
+  toStage: text("to_stage").notNull(),
+  note: text("note"),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+});
+
+export const trackedLinks = pgTable("tracked_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  destinationUrl: text("destination_url").notNull(),
+  campaign: text("campaign"),
+  ownerClientId: uuid("owner_client_id").references(() => clients.id),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const clientFiles = pgTable("client_files", {
+export const linkClicks = pgTable("link_clicks", {
   id: uuid("id").primaryKey().defaultRandom(),
-  clientId: uuid("client_id").notNull().references(() => clients.id),
-  title: text("title").notNull(),
-  url: text("url").notNull(),
-  category: clientFileCategoryEnum("category").notNull().default("outro"),
-  addedAt: timestamp("added_at").defaultNow().notNull(),
+  linkId: uuid("link_id").notNull().references(() => trackedLinks.id),
+  sessionId: text("session_id"),
+  referrer: text("referrer"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const clientRoadmapItems = pgTable("client_roadmap_items", {
+export const clientDiagnostics = pgTable("client_diagnostics", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id").notNull().references(() => clients.id),
-  title: text("title").notNull(),
-  description: text("description"),
-  status: clientRoadmapStatusEnum("status").notNull().default("a_fazer"),
-  dueDate: date("due_date"),
-  completedAt: timestamp("completed_at"),
+  answers: jsonb("answers"),
+  scores: jsonb("scores").$type<{
+    aquisicao: number;
+    posicionamento: number;
+    processoComercial: number;
+    tecnologia: number;
+  }>(),
+  bottleneck: text("bottleneck"),
+  recommendations: jsonb("recommendations").$type<{ productSlug: string; reason: string }[]>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 ```
 
-`date` precisa ser importado de `drizzle-orm/pg-core` (hoje o schema não usa esse
-tipo).
-
-### Catálogo de propostas (`src/data/proposals.ts`, novo arquivo — não é tabela)
+### Constante de estágios (`src/lib/method-stages.ts`, novo — espelha `src/data/method.ts`)
 
 ```typescript
-export const KNOWN_PROPOSALS = [
-  { slug: "vaz-ferreira", label: "Vaz Ferreira Advogados" },
-  { slug: "mv-imoveis", label: "MV Imóveis" },
-  { slug: "capbox", label: "CapBox" },
-  { slug: "francine-leite", label: "Francine Leite (corretora)" },
+export const METHOD_STAGES = [
+  { id: "raio-x", label: "Raio-X" },
+  { id: "direcao", label: "Direção" },
+  { id: "estrutura", label: "Estrutura" },
+  { id: "motor-de-aquisicao", label: "Motor de aquisição" },
+  { id: "curva-de-otimizacao", label: "Curva de otimização" },
 ] as const;
-```
 
-Usado pelo `<select>` de "registrar proposta enviada" e para montar o link
-`/proposta/{slug}` exibido na pasta do cliente. Ao publicar uma proposta nova,
-basta adicionar uma linha aqui — sem migration.
+export type MethodStageId = (typeof METHOD_STAGES)[number]["id"];
+```
 
 ## APIs novas
 
-- **`POST /api/admin/clients`** — cria cliente manualmente (nome, whatsapp,
-  enteredAt; slug gerado a partir do nome, com opção de ajustar antes de
-  salvar). *(Bloco 1 — sem dependência de nenhuma tabela nova.)*
-- **`PATCH /api/admin/clients/[slug]`** — edita dados básicos do cliente
-  (nome, whatsapp, enteredAt).
-- `GET/POST /api/admin/clients/[slug]/products` — lista / adiciona produto.
-- `PATCH /api/admin/clients/[slug]/products/[id]` — altera status.
-- `GET/POST /api/admin/clients/[slug]/proposals` — lista / registra proposta
-  enviada. Validação por `proposalType`: se `"site"`, `proposalSlug`
-  obrigatório e checado contra `KNOWN_PROPOSALS` (rejeita slug desconhecido);
-  se `"externa"`, `externalLabel` obrigatório (`externalUrl` opcional).
-- `PATCH /api/admin/clients/[slug]/proposals/[id]` — altera status
-  (enviada/aceita/recusada).
-- `GET/POST /api/admin/clients/[slug]/files` — lista / adiciona referência de
-  arquivo.
-- `DELETE /api/admin/clients/[slug]/files/[id]` — remove referência.
-- `GET/POST /api/admin/clients/[slug]/roadmap` — lista / cria item de roadmap.
-- `PATCH /api/admin/clients/[slug]/roadmap/[id]` — atualiza status/data/título
-  (preenche `completedAt` ao marcar "feito").
+- `GET /api/admin/products` — catálogo (id, slug, name, category, isActive, isEntryProduct).
+- `GET/POST /api/admin/clients/[slug]/products` — engajamentos do cliente / associa produto novo.
+- `PATCH /api/admin/clients/[slug]/products/[id]` — altera `status` e/ou `currentStage`; ao mudar `currentStage`, grava em `client_stage_history` na mesma transação.
+- `GET/POST /api/admin/links` — lista com agregados de clique / cria link novo (slug único gerado do rótulo).
+- `GET /l/[slug]` (rota pública, fora de `/api/admin`) — registra `link_clicks` (fire-and-forget, nunca bloqueia) e responde `302` para `destinationUrl`.
+- `GET/POST /api/admin/clients/[slug]/diagnostics` — histórico / cria diagnóstico novo, computando `scores`/`bottleneck`/`recommendations` a partir das respostas.
+- `GET /api/admin/dashboard/operacao` — clientes ativos, entregas ativas/travadas, funil do método, clientes por produto, oportunidades, novos por mês.
+- `GET /api/admin/dashboard/links` — ranking de links, páginas mais vistas, jornada, breakdown UTM, série diária.
+- `GET /api/admin/dashboard/leads` — estende `/api/admin/analytics/summary` existente com série diária e taxa lead→cliente.
 
-Todas protegidas pelo `proxy.ts` já existente (matcher já cobre
-`/api/admin/:path*`), mesmo padrão de autenticação das rotas atuais.
+## Lógica de recomendação (Módulo 4)
+
+Regra simples e explícita (não é machine learning): o pilar com menor score
+mapeia para um produto fixo:
+
+```
+aquisicao      → trafego-pago
+posicionamento → posicionamento
+processoComercial → inteligencia-comercial
+tecnologia     → tecnologia
+```
+
+Empate: lista todos os pilares empatados no mínimo. Produto já contratado
+(engajamento "ativo") é excluído da recomendação — o próprio Módulo 2 já o
+mostra como contratado.
 
 ## Componentes de UI (novos/alterados)
 
-- `src/app/admin/(protected)/clients/page.tsx` (altera) — adiciona botão
-  **"Novo cliente"** abrindo `ClientForm` (modal ou seção inline); lista
-  passa a refletir clientes criados manualmente com a mesma cara dos vindos de
-  briefing.
-- `src/components/admin/ClientForm.tsx` (novo) — formulário de
-  criação/edição de cliente (nome, whatsapp, data de entrada, slug editável na
-  criação). *(Bloco 1.)*
-- `src/app/admin/(protected)/clients/[slug]/page.tsx` (reestrutura) — seções:
-  **Dados básicos** (editável via `ClientForm`), **Produtos** (contratados +
-  oportunidades de upsell lado a lado), **Propostas enviadas** (lista com link
-  pra `/proposta/[slug]`), **Briefings** (o que já existe hoje, agora uma
-  seção entre outras), **Arquivos**, **Roadmap**.
-- `src/components/admin/ClientProductsPanel.tsx` (novo) — dois grupos:
-  contratados (com toggle de status) e catálogo restante (upsell).
-- `src/components/admin/ClientProposalForm.tsx` / lista (novo).
-- `src/components/admin/ClientFilesPanel.tsx` (novo) — lista + form de
-  adicionar referência de arquivo.
-- `src/components/admin/ClientRoadmapPanel.tsx` (novo) — colunas ou lista
-  agrupada por status, com data prevista.
+- `src/app/admin/(protected)/clients/[slug]/page.tsx` — Server Component:
+  busca cliente, engajamentos, catálogo, diagnósticos direto via `db`;
+  seções Produtos (contratado + upsell), Diagnóstico, Briefings.
+- `src/components/admin/ClientProductsPanel.tsx`, `ClientDiagnosticPanel.tsx`
+  — ilhas `"use client"` para as ações (associar produto, avançar estágio,
+  novo diagnóstico).
+- `src/app/admin/(protected)/links/page.tsx` (novo) — "Links e Páginas".
+- `src/app/l/[slug]/route.ts` (novo, fora de `/admin`) — redirecionamento
+  público.
+- `src/app/admin/(protected)/dashboard/page.tsx` — 3 abas/seções (Operação,
+  Links e Páginas, Leads e Conversão), com `recharts` para os gráficos de
+  linha/barra.
+- `src/components/admin/AdminShell.tsx` — novo item de nav "Links".
 
 ## Perguntas em aberto para a Fase 3
 
-Todas resolvidas — ver "Perguntas em aberto — status" em `requirements.md`.
-Nenhuma pendência bloqueante para iniciar a implementação.
+Nenhuma pendência bloqueante.

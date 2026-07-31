@@ -1,235 +1,195 @@
-# Requirements — Workspace de Cliente
+# Requirements — Plataforma de Operação da Brain (admin como sistema operacional)
 
 ## Contexto
 
-O CRM/admin (`specs/admin-crm-analytics/`) está no ar: autenticação, tracking,
-leads do site, dashboard de tráfego e uma seção `Clientes` — mas essa seção, hoje,
-é só um espelho passivo de um formulário externo, não uma ferramenta de operação.
+Esta versão substitui a anterior. O Bloco 1 (cadastro manual de cliente) já
+está em produção e continua como está. A partir daqui, o objetivo deixa de
+ser "CRUD de cliente" e passa a ser: construir a plataforma que a Brain usa
+para **vender, entregar e provar resultado**.
 
-Diagnóstico (lido no código, não só na tela):
+Diagnóstico medido (não suposto):
 
-- `src/app/api/briefings/[client]/route.ts` é a **única** rota que insere linhas
-  em `clients` — e ela só roda quando alguém preenche `/briefing/[slug]`
-  (pensado para ser preenchido durante uma reunião). Não tem autenticação de
-  admin.
-- `src/app/api/admin/clients/route.ts` só tem `GET`. Não existe `POST`/`PUT` —
-  não dá para criar ou editar um cliente pelo painel.
-- `src/app/admin/(protected)/clients/page.tsx` não tem botão "novo cliente" nem
-  formulário de cadastro — só lista o que já existe.
-- O schema (`src/db/schema.ts`) modela `clients` (nome, whatsapp, slug) e
-  `client_briefings` (JSON de respostas do formulário). Não existe nada sobre
-  produto contratado, propostas enviadas, arquivos do cliente ou
-  roadmap/cronograma.
+- APIs em produção respondem rápido (240–450ms). O gargalo é de
+  renderização: páginas do admin são `"use client"` + `useEffect` + fetch →
+  waterfall → spinner antes de qualquer conteúdo.
+- O painel está vazio: 0 page views, 0 leads, 1 cliente sem nada dentro.
+- `/admin/clients/[slug]` só mostra "Nenhum briefing preenchido ainda".
+- O dashboard mede só o site institucional — nada da operação da agência.
+- **Erro conceitual do spec anterior**: `client_products` modelava produto
+  como `pgEnum` com 5 valores chutados. Produto é entidade de negócio (a
+  Brain vende, precifica e ajusta produto o tempo todo) — um enum do
+  Postgres exige migration pra adicionar um produto novo. Substituído por
+  uma tabela `products`.
 
-Resultado prático: a agência fecha um cliente novo e não tem onde colocar isso no
-sistema, a não ser mandando ele preencher um formulário. O painel precisa virar o
-hub que o dono da agência usa para **conduzir** cada cliente — não só medir
-tráfego do site institucional.
+## Catálogo real (fonte: `src/data/services.ts`)
 
-> Nota sobre uma versão anterior deste spec: uma primeira tentativa deste
-> workspace incluía faturamento (valor mensal, MRR, histórico de pagamento).
-> Esta versão substitui aquela — o foco agora é exclusivamente cadastro,
-> produtos (com visão de upsell), propostas, arquivos e roadmap, conforme
-> repriorizado. Faturamento/MRR fica para um spec futuro, se ainda fizer
-> sentido.
+A Brain vende 6 produtos:
 
-## Fora de escopo (explicitamente excluído nesta v1)
+1. Tráfego pago e aquisição (`trafego-pago`) — **produto de entrada**
+2. Posicionamento (`posicionamento`)
+3. Sites e landing pages (`sites-landing-pages`)
+4. Audiovisual (`audiovisual`)
+5. Inteligência comercial (`inteligencia-comercial`)
+6. Broker Apps / Tecnologia (`tecnologia`)
 
-- Faturamento, valor mensal, MRR ou histórico de pagamento (ver nota acima).
-- Emissão/assinatura de contrato — fica fora do sistema, como já decidido para
-  documentos do tipo contrato.
-- Upload de arquivo binário para dentro do sistema — v1 registra
-  **links/referências** para arquivos que já existem em outro lugar (Drive,
-  WhatsApp, etc.), não um repositório de arquivos. Justificativa em `design.md`.
-- Multi-usuário / permissões por cliente — continua uso interno do dono da
-  agência (mesma decisão do CRM/analytics).
-- Notificação automática de roadmap atrasado ou proposta sem resposta — a v1
-  só exibe, não avisa.
-- Portal do cliente (acesso externo à própria pasta).
+E entrega segundo o **Método Brain** (fonte: `src/data/method.ts`), 5
+estágios, nesta ordem: Raio-X → Direção → Estrutura → Motor de aquisição →
+Curva de otimização. Todo cliente, em todo produto contratado, está em
+algum desses estágios — é isso que transforma "lista de clientes" em
+ferramenta de consultoria.
 
-## User Stories & Requisitos (notação EARS)
+## Fora de escopo desta versão
 
-### 1. Cadastro manual de cliente pelo admin (prioridade máxima)
+- **Propostas, arquivos e roadmap genérico** — faziam parte do spec
+  anterior (Blocos 3–7 do `tasks.md` antigo) e ficam **adiados**, não
+  cancelados. Esta versão prioriza os 4 módulos abaixo porque são o que
+  transforma o painel em ferramenta de venda/entrega/prova de resultado;
+  proposta/arquivo/roadmap genérico voltam depois se ainda fizerem sentido
+  separado do que o Módulo 2 (estágio do método) já cobre.
+- Emissão de nota fiscal, contrato, assinatura eletrônica.
+- Multi-usuário / permissões — continua uso interno do dono da agência.
+- Notificação automática (e-mail/WhatsApp) de qualquer evento.
 
-**User Story**: Como dono da agência, quero cadastrar um cliente novo direto pelo
-painel assim que fecho o contrato, sem depender de ele preencher um formulário,
-porque o meu fluxo de trabalho começa no fechamento, não no briefing.
+## Módulo 1 — Catálogo de produtos
 
-```
-WHEN o admin cria um cliente pela tela /admin/clients (nome, contato/WhatsApp,
-    data de entrada)
-THE SYSTEM SHALL criar o registro em `clients` imediatamente, com um slug gerado
-    a partir do nome (editável antes de salvar), sem exigir nenhum briefing ou
-    proposta associada
-
-WHERE já existe um cliente com o mesmo slug
-WHEN o admin tenta criar outro cliente com esse slug
-THE SYSTEM SHALL rejeitar a criação e indicar que o slug já está em uso
-
-WHEN o admin edita os dados básicos de um cliente existente (nome, contato, data
-    de entrada)
-THE SYSTEM SHALL atualizar o registro em `clients` mantendo o slug e o histórico
-    (produtos, propostas, briefings, arquivos, roadmap) intactos
-
-WHEN um briefing é enviado via /api/briefings/[client] para um slug que ainda não
-    existe em `clients`
-THE SYSTEM SHALL continuar criando o cliente automaticamente (comportamento atual
-    preservado — o formulário de briefing continua funcionando como uma porta de
-    entrada possível, só deixa de ser a única)
-```
-
-### 2. Gestão de produtos por cliente (com visão de upsell)
-
-**User Story**: Como dono da agência, quero ver quais produtos um cliente já tem
-e quais ele ainda não tem, para saber exatamente onde cabe upsell.
+**User Story**: Como dono da agência, quero que o catálogo de produtos seja
+dado, não código, para adicionar ou ajustar um produto sem precisar de uma
+migration.
 
 ```
-THE SYSTEM SHALL restringir produto a um catálogo fechado: Tráfego Pago,
-    Diagnóstico Comercial, Consultoria, BrokerApps, Outro
+THE SYSTEM SHALL armazenar o catálogo de produtos em uma tabela (`products`),
+    nunca em um enum ou constante de código
 
-WHEN o admin adiciona um produto a um cliente (tipo, data de início)
-THE SYSTEM SHALL criar o registro com status inicial "ativo"
+WHEN um produto é adicionado ao catálogo
+THE SYSTEM SHALL persisti-lo via INSERT, sem exigir alteração de schema
 
-WHEN o admin altera o status de um produto (ativo ↔ pausado, qualquer status →
-    encerrado)
-THE SYSTEM SHALL atualizar o status desse produto sem afetar os demais produtos
-    do cliente
+THE SYSTEM SHALL popular o catálogo inicial a partir de `src/data/services.ts`
+    (os 6 produtos reais da Brain), marcando "Tráfego pago e aquisição" como
+    produto de entrada (`isEntryProduct`)
+
+WHILE um produto está marcado como inativo (`isActive = false`)
+THE SYSTEM SHALL continuar exibindo-o no histórico de clientes que já o
+    contrataram, mas não oferecê-lo como opção de upsell
+```
+
+## Módulo 2 — Engajamento do cliente (o "contrato vivo")
+
+**User Story**: Como dono da agência, quero saber que produto cada cliente
+tem, em que estágio do Método Brain está a entrega, e quem está travado, para
+conduzir a operação e não só registrar contrato.
+
+```
+WHEN o admin associa um produto do catálogo a um cliente
+THE SYSTEM SHALL criar um engajamento (`client_products`) com status "ativo"
+    e estágio inicial "Raio-X"
 
 WHILE o admin visualiza a pasta de um cliente
-THE SYSTEM SHALL exibir dois grupos lado a lado: os produtos do catálogo que o
-    cliente já tem (com status) e os produtos do catálogo que o cliente ainda
-    não tem — este segundo grupo é a lista de oportunidades de upsell para
-    aquele cliente
+THE SYSTEM SHALL exibir, lado a lado: os produtos contratados (com status e
+    estágio atual) e os produtos do catálogo ainda não contratados
+    (oportunidade de upsell)
 
-WHERE um produto do catálogo tem status "encerrado" (nenhuma linha "ativa"
-    correspondente)
-THE SYSTEM SHALL exibi-lo no grupo de oportunidades de upsell, indicando que já
-    foi cliente desse produto antes
+WHEN o admin avança o estágio de um engajamento
+THE SYSTEM SHALL atualizar o estágio atual e registrar a transição
+    (`client_stage_history`: de qual estágio, para qual, quando) — sem isso
+    não dá pra medir tempo de ciclo nem mostrar evolução pro cliente
+
+WHILE o admin visualiza o dashboard
+THE SYSTEM SHALL destacar engajamentos "travados" (mesmo estágio há mais de
+    21 dias) para priorização
 ```
 
-### 3. Registro de propostas enviadas
+## Módulo 3 — Links rastreáveis
 
-**User Story**: Como dono da agência, quero registrar quais propostas comerciais
-já mandei para um cliente e quando, para saber o histórico de negociação sem
-precisar lembrar de cabeça — inclusive quando a proposta não é uma página do
-site (PDF, Google Doc, ou só uma mensagem no WhatsApp).
+**User Story**: Como dono da agência, quero meus próprios links curtos pra
+bio do Instagram, WhatsApp e anúncios, e saber exatamente o que cada um
+performa e pra onde as pessoas vão depois de clicar.
 
 ```
-THE SYSTEM SHALL suportar dois tipos de proposta registrada: "do site" (com
-    página correspondente em /proposta/[slug]) e "externa" (sem página no
-    site — PDF, Google Doc, WhatsApp, etc.)
+WHEN o admin cria um link rastreável (rótulo, URL de destino, campanha
+    opcional, cliente dono opcional)
+THE SYSTEM SHALL gerar um slug único acessível em /l/[slug]
 
-WHEN o admin registra uma proposta "do site" (qual página, data de envio)
-THE SYSTEM SHALL vincular esse registro ao cliente e à página de proposta
-    correspondente em /proposta/[slug]
+WHEN um visitante acessa /l/[slug]
+THE SYSTEM SHALL registrar o clique (sessionId, referrer, UTM, user agent
+    resumido) e redirecionar (302) para a URL de destino, sem atrasar
+    perceptivelmente a navegação
 
-THE SYSTEM SHALL restringir a escolha de proposta "do site" às páginas que já
-    existem (ex: vaz-ferreira, mv-imoveis, capbox, francine-leite), evitando
-    digitar um slug que não existe
+WHILE o admin visualiza a seção "Links e Páginas"
+THE SYSTEM SHALL exibir, por link: cliques totais, CTR (cliques / page views
+    da página que hospeda o link, quando aplicável), destino, e o
+    caminho mais comum de páginas vistas em seguida pela mesma sessão
 
-WHEN o admin registra uma proposta "externa" (título livre, data de envio, link
-    externo opcional)
-THE SYSTEM SHALL exigir o título livre (ex: "Proposta PDF enviada por e-mail")
-    e aceitar o link externo como opcional
+WHERE um link está marcado como inativo
+THE SYSTEM SHALL continuar servindo o redirecionamento (não quebrar link já
+    publicado), mas ocultá-lo da lista de criação de novos links
+```
+
+## Módulo 4 — Diagnóstico (consultoria)
+
+**User Story**: Como dono da agência, quero transformar o briefing em um
+diagnóstico com nota por pilar, para recomendar produto com justificativa,
+não só apontar o que falta.
+
+```
+WHEN o admin cria um diagnóstico para um cliente (reaproveitando respostas de
+    briefing existentes, se houver)
+THE SYSTEM SHALL calcular uma nota por pilar (aquisição, posicionamento,
+    processo comercial, tecnologia) e identificar o gargalo principal
+
+THE SYSTEM SHALL gerar recomendações de produto a partir das notas (ex: nota
+    baixa em aquisição → tráfego pago; nota baixa em processo comercial →
+    inteligência comercial; nota baixa em tecnologia → Broker Apps), cada
+    uma com justificativa
 
 WHILE o admin visualiza a pasta de um cliente
-THE SYSTEM SHALL listar as propostas enviadas a esse cliente — as "do site" com
-    link direto para /proposta/[slug], as "externas" com o título livre e o
-    link externo (se houver) — todas com data de envio e status (enviada,
-    aceita, recusada)
-
-WHEN o admin atualiza o status de uma proposta (ex: de "enviada" para "aceita")
-THE SYSTEM SHALL atualizar apenas esse registro, sem criar ou alterar produtos
-    automaticamente (a criação do produto contratado continua sendo uma ação
-    manual do admin — ver Requisito 2)
+THE SYSTEM SHALL exibir o histórico de diagnósticos e a recomendação mais
+    recente como a lista de upsell prioritária (substituindo, quando houver
+    diagnóstico, a lista genérica "catálogo menos contratado" do Módulo 2)
 ```
 
-### 4. Associação dos briefings existentes à visão do cliente
-
-**User Story**: Como dono da agência, quero ver o briefing preenchido por um
-cliente junto com o resto da pasta dele, não como se fosse a única coisa que
-existe sobre esse cliente.
+## Dashboard — 3 visões
 
 ```
-THE SYSTEM SHALL manter o fluxo atual de /briefing/[slug] e a tabela
-    `client_briefings` sem nenhuma mudança de comportamento
+THE SYSTEM SHALL organizar o dashboard em 3 visões: Operação, Links e
+    Páginas, Leads e Conversão
 
-WHILE o admin visualiza a pasta de um cliente
-THE SYSTEM SHALL exibir os briefings preenchidos (se houver) como uma seção entre
-    outras (dados básicos, produtos, propostas, briefings, arquivos, roadmap),
-    nunca como a única informação disponível sobre o cliente
+WHILE o admin está na visão "Operação"
+THE SYSTEM SHALL exibir: clientes ativos, entregas ativas, entregas travadas
+    (>21 dias no mesmo estágio), propostas em aberto (se existir o módulo),
+    roadmap atrasado (se existir o módulo), funil do Método (contagem por
+    estágio), clientes por produto, tabela de oportunidades
+    (cliente × produto recomendado × motivo) e clientes novos por mês
 
-WHERE um cliente foi criado manualmente (Requisito 1) e nunca preencheu um
-    briefing
-THE SYSTEM SHALL exibir a seção de briefings vazia, sem tratar isso como erro ou
-    estado inválido
-```
+WHILE o admin está na visão "Links e Páginas"
+THE SYSTEM SHALL exibir: ranking de links por cliques/CTR, páginas mais
+    vistas e jornada mais comum, breakdown por UTM campaign, e evolução
+    diária de page views e cliques
 
-### 5. Arquivos/pastas por cliente
-
-**User Story**: Como dono da agência, quero ter uma lista de materiais e
-documentos relevantes de cada cliente, para não depender de procurar em
-conversas de WhatsApp ou pastas soltas do computador.
-
-```
-WHEN o admin adiciona uma referência de arquivo a um cliente (título, link
-    externo, categoria opcional)
-THE SYSTEM SHALL salvar essa referência vinculada ao cliente — a v1 armazena
-    apenas o link/referência, não o arquivo em si (ver design.md para a
-    justificativa dessa escolha)
-
-WHILE o admin visualiza a pasta de um cliente
-THE SYSTEM SHALL listar as referências de arquivo desse cliente, agrupadas ou
-    filtráveis por categoria, com o link abrindo em nova aba
-
-WHEN o admin remove uma referência de arquivo
-THE SYSTEM SHALL removê-la da lista sem afetar o arquivo original (que vive fora
-    do sistema)
-```
-
-### 6. Roadmap/cronograma por cliente
-
-**User Story**: Como dono da agência, quero ver o que já foi feito, o que está em
-andamento e o que falta para cada cliente, com datas, para conduzir a execução
-sem depender da minha memória.
-
-```
-WHEN o admin cria um item de roadmap para um cliente (título, descrição
-    opcional, data prevista opcional)
-THE SYSTEM SHALL criar o item com status "a fazer"
-
-WHILE o admin visualiza a pasta de um cliente
-THE SYSTEM SHALL exibir os itens de roadmap agrupados por status (a fazer, em
-    andamento, feito), ordenáveis por data prevista
-
-WHEN o admin muda o status de um item para "em andamento" ou "feito"
-THE SYSTEM SHALL atualizar o status e, no caso de "feito", registrar a data de
-    conclusão
-
-WHEN o admin edita título, descrição ou data prevista de um item existente
-THE SYSTEM SHALL atualizar o item sem criar um novo registro
+WHILE o admin está na visão "Leads e Conversão"
+THE SYSTEM SHALL exibir os cards já existentes mais um gráfico de linha
+    (page views × leads por dia), funil do quiz com abandono por etapa,
+    leads por origem/campanha, e taxa lead → cliente
 ```
 
 ## Requisitos não-funcionais
 
-- **Consistência com o CRM existente**: todas as tabelas novas referenciam
-  `clients.id` por FK; nenhuma duplica nome/whatsapp/slug que já existe em
-  `clients`.
-- **Não quebrar o fluxo atual**: `/briefing/[slug]` e `client_briefings`
-  continuam funcionando exatamente como hoje — este spec só adiciona portas de
-  entrada e visões novas em cima do que já existe.
-- **Sem novo usuário/papel**: continua protegido pelo mesmo `proxy.ts` e sessão
-  de admin único já existentes (matcher já cobre `/api/admin/:path*`).
-- **Entrega incremental**: o cadastro manual de cliente (Requisito 1) precisa
-  funcionar de forma independente das demais seções (produtos, propostas,
-  arquivos, roadmap), que podem ser entregues em blocos separados sem bloquear
-  o uso do que já estiver pronto — ver `tasks.md`.
+- **Performance de renderização**: páginas do admin buscam dado direto via
+  `db` em Server Components sempre que possível; `"use client"` só em
+  filtros, formulários e toggles. Meta: `/admin/clients/[slug]` mostra
+  conteúdo no primeiro paint.
+- **Estágio como texto validado em código, não enum de banco**: ao contrário
+  de produto, os 5 estágios do Método Brain são metodologia estável da
+  marca — modelados como `text` validado contra uma constante
+  TypeScript compartilhada (espelhando `src/data/method.ts`), não um
+  `pgEnum` (evita o mesmo problema de rigidez do produto) nem uma tabela
+  nova (não é dado editável pelo admin no dia a dia).
+- **Seed de demonstração reversível**: roda contra o banco de produção
+  (banco único, sem branch por ambiente); precisa de uma flag `--clean` que
+  remove exatamente o que criou, sem `DROP TABLE`.
+- **Dados com tendência, não retos**: séries temporais do seed devem ter
+  crescimento nas últimas semanas — gráfico reto não prova nada.
 
-## Perguntas em aberto — status
+## Perguntas em aberto
 
-1. **Slug do cliente** — ✅ Resolvido: gerado a partir do nome, editável só na
-   criação, travado depois de criado.
-2. **Categoria de arquivo** (Requisito 5) — ✅ Resolvido: Contrato, Material,
-   Entregável, Outro, **Acesso** (login/credenciais de plataforma do cliente).
-3. **Proposta sem página correspondente** — ✅ Resolvido: existe, sim (PDF,
-   Google Doc, WhatsApp) — coberto agora pelo tipo "externa" no Requisito 3.
+1. Nenhuma pendência bloqueante para iniciar — arquitetura confirmada pelo
+   dono da agência antes deste documento ser escrito.
