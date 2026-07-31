@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date } from "drizzle-orm/pg-core";
 
 export const leadStatusEnum = pgEnum("lead_status", ["novo", "contatado", "fechado", "perdido"]);
 export const leadSourceEnum = pgEnum("lead_source", ["banner", "quiz-cta", "homepage-contact"]);
@@ -93,6 +93,9 @@ export const clients = pgTable("clients", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   whatsapp: text("whatsapp"),
+  // Quando o cliente entrou de fato — distinto de createdAt (quando a linha foi
+  // criada no banco); nullable pra não quebrar clientes já existentes.
+  enteredAt: date("entered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

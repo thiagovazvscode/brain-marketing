@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN "entered_at" date;

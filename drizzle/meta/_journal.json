@@ -8,6 +8,13 @@
       "when": 1785519520512,
       "tag": "0000_pale_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785521769506,
+      "tag": "0001_slippery_celestials",
+      "breakpoints": true
     }
   ]
 }
