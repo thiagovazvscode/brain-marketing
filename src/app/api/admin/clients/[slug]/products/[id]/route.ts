@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { clientProducts, clientStageHistory, clientEngagementStatusEnum } from "@/db/schema";
+import { isValidMethodStage } from "@/lib/method-stages";
+
+const VALID_STATUSES = clientEngagementStatusEnum.enumValues;
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  let body: { status?: string; currentStage?: string; notes?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Payload inválido." }, { status: 400 });
+  }
+
+  try {
+    const [existing] = await db.select().from(clientProducts).where(eq(clientProducts.id, id)).limit(1);
+    if (!existing) return NextResponse.json({ error: "Engajamento não encontrado." }, { status: 404 });
+
+    const updates: Partial<typeof clientProducts.$inferInsert> = { updatedAt: new Date() };
+
+    if (body.status !== undefined) {
+      if (!VALID_STATUSES.includes(body.status as (typeof VALID_STATUSES)[number])) {
+        return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+      }
+      updates.status = body.status as (typeof VALID_STATUSES)[number];
+      if (body.status === "encerrado" && !existing.endedAt) {
+        updates.endedAt = new Date().toISOString().slice(0, 10);
+      }
+    }
+
+    if (body.notes !== undefined) {
+      updates.notes = body.notes?.trim() || null;
+    }
+
+    let stageChanged = false;
+    if (body.currentStage !== undefined && body.currentStage !== existing.currentStage) {
+      if (!isValidMethodStage(body.currentStage)) {
+        return NextResponse.json({ error: "Estágio inválido." }, { status: 400 });
+      }
+      updates.currentStage = body.currentStage;
+      stageChanged = true;
+    }
+
+    const [updated] = await db.update(clientProducts).set(updates).where(eq(clientProducts.id, id)).returning();
+
+    if (stageChanged) {
+      await db.insert(clientStageHistory).values({
+        clientProductId: id,
+        fromStage: existing.currentStage,
+        toStage: updated.currentStage,
+      });
+    }
+
+    return NextResponse.json({ engagement: updated });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível atualizar o engajamento." }, { status: 500 });
+  }
+}

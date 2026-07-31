@@ -24,6 +24,18 @@ function getOrCreateSessionId(): string {
   return id;
 }
 
+// Se a URL trouxer "_bs" (setado pelo redirect de /l/[slug]), adota esse id
+// como sessionId — dá continuidade entre o clique no link rastreável e as
+// page views que acontecem depois, na mesma sessão.
+function adoptSessionFromUrl(): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  const bridged = params.get("_bs");
+  if (bridged) {
+    window.localStorage.setItem(SESSION_KEY, bridged);
+  }
+}
+
 function captureUtm(): Utm {
   if (typeof window === "undefined") return {};
 
@@ -63,6 +75,7 @@ export function useTrackingSession() {
   const utmRef = useRef<Utm>({});
 
   useEffect(() => {
+    adoptSessionFromUrl();
     utmRef.current = captureUtm();
   }, [pathname]);
 
