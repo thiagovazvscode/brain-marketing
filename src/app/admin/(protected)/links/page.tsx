@@ -3,6 +3,10 @@ import { db } from "@/db";
 import { trackedLinks, linkClicks, clients } from "@/db/schema";
 import { CreateLinkForm } from "@/components/admin/CreateLinkForm";
 
+// Evita pré-renderização estática no build — a lista de links e cliques
+// precisa refletir o banco a cada request, não um snapshot do deploy.
+export const dynamic = "force-dynamic";
+
 async function mostCommonNextPage(linkId: string): Promise<{ path: string; count: number } | null> {
   const result = await db.execute<{ path: string; count: number }>(sql`
     SELECT pv.path as path, count(*)::int as count

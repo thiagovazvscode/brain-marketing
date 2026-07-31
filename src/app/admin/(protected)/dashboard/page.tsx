@@ -1,211 +1,308 @@
-"use client";
+import { sql, eq, desc } from "drizzle-orm";
+import { Eye, MousePointerClick, Users, Percent, Building2, Layers, AlertTriangle, Link2 } from "lucide-react";
+import { db } from "@/db";
+import { clientProducts, products, trackedLinks, linkClicks, pageViews, quizSessions } from "@/db/schema";
+import { METHOD_STAGES } from "@/lib/method-stages";
+import { DashboardTabs } from "@/components/admin/DashboardTabs";
+import { StatTile, HorizontalBarList } from "@/components/admin/DashboardWidgets";
+import { TrendLineChart } from "@/components/admin/charts/TrendLineChart";
+import { StageFunnelChart } from "@/components/admin/charts/StageFunnelChart";
 
-import { useEffect, useMemo, useState } from "react";
-import { Eye, MousePointerClick, Users, Percent, Loader2 } from "lucide-react";
-import type { AnalyticsPeriod, AnalyticsPeriodData } from "@/types/tracking";
+// Sem isso, o Next tentaria pré-renderizar esta página estaticamente no
+// build (já que não usa cookies()/headers()) e o dashboard ficaria
+// congelado no snapshot do momento do deploy, nunca refletindo dado novo.
+export const dynamic = "force-dynamic";
 
-const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
-  { value: "hoje", label: "Hoje" },
-  { value: "7d", label: "7 dias" },
-  { value: "30d", label: "30 dias" },
-];
+async function getOperacaoData() {
+  const [clientesAtivosResult, entregasAtivasResult, stageRows, produtoRows, travadasResult, oportunidadeRows, novosPorMesResult] =
+    await Promise.all([
+      db.execute<{ count: number }>(sql`SELECT count(DISTINCT client_id)::int as count FROM client_products WHERE status = 'ativo'`),
+      db.execute<{ count: number }>(sql`SELECT count(*)::int as count FROM client_products WHERE status = 'ativo'`),
+      db
+        .select({ stage: clientProducts.currentStage, count: sql<number>`count(*)::int` })
+        .from(clientProducts)
+        .where(sql`${clientProducts.status} != 'encerrado'`)
+        .groupBy(clientProducts.currentStage),
+      db
+        .select({ name: products.name, count: sql<number>`count(DISTINCT ${clientProducts.clientId})::int` })
+        .from(clientProducts)
+        .innerJoin(products, eq(products.id, clientProducts.productId))
+        .where(eq(clientProducts.status, "ativo"))
+        .groupBy(products.name)
+        .orderBy(desc(sql`count(DISTINCT ${clientProducts.clientId})`)),
+      db.execute<{ count: number }>(sql`
+        SELECT count(*)::int as count FROM (
+          SELECT cp.id, MAX(csh.changed_at) as last_change
+          FROM client_products cp
+          JOIN client_stage_history csh ON csh.client_product_id = cp.id
+          WHERE cp.status = 'ativo'
+          GROUP BY cp.id
+        ) t WHERE last_change < now() - interval '21 days'
+      `),
+      db.execute<{ client_id: string; client_name: string; recommendations: { productSlug: string; reason: string }[] }>(sql`
+        SELECT DISTINCT ON (cd.client_id) cd.client_id, c.name as client_name, cd.recommendations
+        FROM client_diagnostics cd
+        JOIN clients c ON c.id = cd.client_id
+        ORDER BY cd.client_id, cd.created_at DESC
+      `),
+      db.execute<{ month: string; count: number }>(sql`
+        SELECT to_char(date_trunc('month', COALESCE(entered_at::timestamp, created_at)), 'YYYY-MM') as month, count(*)::int as count
+        FROM clients
+        WHERE COALESCE(entered_at::timestamp, created_at) >= now() - interval '12 months'
+        GROUP BY 1 ORDER BY 1
+      `),
+    ]);
 
-const FUNNEL_LABELS = [
-  "Objetivo principal",
-  "Perfil no mercado",
-  "Captação hoje",
-  "Gestão de leads",
-  "Vitória em 90 dias",
-];
+  const funil = METHOD_STAGES.map((s) => ({
+    label: s.label,
+    value: stageRows.find((r) => r.stage === s.id)?.count ?? 0,
+  }));
 
-const EMPTY_DATA: AnalyticsPeriodData = {
-  pageViews: [],
-  clicks: [],
-  leadsCount: 0,
-  quizCompletionRate: 0,
-  quizFunnel: [],
-};
-
-function StatTile({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary/15 text-brand-magenta">
-        <Icon className="h-4.5 w-4.5" />
-      </div>
-      <p className="text-2xl font-black tabular-nums text-ink">{value}</p>
-      <p className="mt-1 text-xs font-medium text-muted">{label}</p>
-    </div>
+  const oportunidades = oportunidadeRows.rows.flatMap((row) =>
+    (row.recommendations ?? []).map((rec) => ({
+      cliente: row.client_name,
+      produto: rec.productSlug,
+      motivo: rec.reason,
+    }))
   );
+
+  const novosPorMes = novosPorMesResult.rows.map((r) => ({
+    label: new Date(`${r.month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+    clientes: r.count,
+  }));
+
+  return {
+    clientesAtivos: clientesAtivosResult.rows[0]?.count ?? 0,
+    entregasAtivas: entregasAtivasResult.rows[0]?.count ?? 0,
+    entregasTravadas: travadasResult.rows[0]?.count ?? 0,
+    funil,
+    produtoRows,
+    oportunidades,
+    novosPorMes,
+  };
 }
 
-function HorizontalBarList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { label: string; count: number }[];
-}) {
-  const max = Math.max(...items.map((i) => i.count), 1);
-  return (
-    <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-      <h3 className="mb-4 text-sm font-bold text-ink">{title}</h3>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.label}>
-            <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-              <span className="truncate text-muted">{item.label}</span>
-              <span className="shrink-0 font-bold tabular-nums text-ink">{item.count}</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-bg/60">
-              <div
-                className="h-full rounded-full bg-brand-primary"
-                style={{ width: `${(item.count / max) * 100}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+async function getLinksData() {
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const since30 = sql`${since30d}`;
 
-function QuizFunnel({ steps }: { steps: { label: string; reached: number }[] }) {
-  const max = steps[0]?.reached || 1;
-  return (
-    <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-      <h3 className="mb-4 text-sm font-bold text-ink">Funil do quiz</h3>
-      <div className="space-y-3">
-        {steps.map((step, i) => {
-          const pct = (step.reached / max) * 100;
-          const dropoff = i > 0 ? steps[i - 1].reached - step.reached : 0;
-          return (
-            <div key={step.label}>
-              <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-                <span className="text-muted">
-                  {i + 1}. {step.label}
-                </span>
-                <span className="shrink-0 tabular-nums text-ink">
-                  <span className="font-bold">{step.reached}</span>
-                  {i > 0 && dropoff > 0 && (
-                    <span className="ml-1.5 text-red-400/80">−{dropoff}</span>
-                  )}
-                </span>
-              </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-bg/60">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-600 to-sky-600"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export default function AdminDashboardPage() {
-  const [period, setPeriod] = useState<AnalyticsPeriod>("7d");
-  const [data, setData] = useState<AnalyticsPeriodData>(EMPTY_DATA);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-
-    Promise.all([
-      fetch(`/api/admin/analytics/summary?period=${period}`).then((r) => r.json()),
-      fetch(`/api/admin/analytics/quiz-funnel?period=${period}`).then((r) => r.json()),
-    ])
-      .then(([summary, funnel]) => {
-        if (!active) return;
-        setData({
-          pageViews: summary.pageViews ?? [],
-          clicks: summary.clicks ?? [],
-          leadsCount: summary.leadsCount ?? 0,
-          quizCompletionRate: summary.quizCompletionRate ?? 0,
-          quizFunnel: (funnel.funnel ?? []).map((f: { step: number; reached: number }) => ({
-            step: f.step,
-            label: FUNNEL_LABELS[f.step - 1] ?? `Passo ${f.step}`,
-            reached: f.reached,
-          })),
-        });
+  const [linkRows, pageRows, campaignRows, dailyPageViews, dailyClicks] = await Promise.all([
+    db
+      .select({
+        label: trackedLinks.label,
+        totalClicks: sql<number>`count(${linkClicks.id})::int`,
       })
-      .catch(() => {
-        if (active) setData(EMPTY_DATA);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      .from(trackedLinks)
+      .leftJoin(linkClicks, eq(linkClicks.linkId, trackedLinks.id))
+      .groupBy(trackedLinks.id, trackedLinks.label)
+      .orderBy(desc(sql`count(${linkClicks.id})`))
+      .limit(8),
+    db
+      .select({ path: pageViews.path, count: sql<number>`count(*)::int` })
+      .from(pageViews)
+      .groupBy(pageViews.path)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8),
+    db.execute<{ campaign: string; count: number }>(sql`
+      SELECT COALESCE(utm_campaign, '(sem campanha)') as campaign, count(*)::int as count
+      FROM page_views GROUP BY 1 ORDER BY count DESC LIMIT 8
+    `),
+    db.execute<{ day: string; count: number }>(sql`
+      SELECT to_char(date_trunc('day', created_at), 'DD/MM') as day, count(*)::int as count
+      FROM page_views WHERE created_at >= ${since30} GROUP BY date_trunc('day', created_at) ORDER BY date_trunc('day', created_at)
+    `),
+    db.execute<{ day: string; count: number }>(sql`
+      SELECT to_char(date_trunc('day', created_at), 'DD/MM') as day, count(*)::int as count
+      FROM click_events WHERE created_at >= ${since30} GROUP BY date_trunc('day', created_at) ORDER BY date_trunc('day', created_at)
+    `),
+  ]);
 
-    return () => {
-      active = false;
-    };
-  }, [period]);
+  const dayMap = new Map<string, { pageViews: number; clicks: number }>();
+  for (const r of dailyPageViews.rows) dayMap.set(r.day, { pageViews: r.count, clicks: 0 });
+  for (const r of dailyClicks.rows) {
+    const existing = dayMap.get(r.day) ?? { pageViews: 0, clicks: 0 };
+    existing.clicks = r.count;
+    dayMap.set(r.day, existing);
+  }
+  const daily = Array.from(dayMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, v]) => ({ label, pageViews: v.pageViews, clicks: v.clicks }));
 
-  const totalPageViews = useMemo(
-    () => data.pageViews.reduce((sum, p) => sum + p.count, 0),
-    [data]
-  );
+  return {
+    linkRanking: linkRows.map((r) => ({ label: r.label, count: r.totalClicks })),
+    topPages: pageRows.map((r) => ({ label: r.path, count: r.count })),
+    campaignBreakdown: campaignRows.rows.map((r) => ({ label: r.campaign, count: r.count })),
+    daily,
+  };
+}
 
-  return (
+async function getLeadsData() {
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const since30 = sql`${since30d}`;
+
+  const [leadsCountResult, closedCountResult, campaignRows, dailyPageViews, dailyLeads, funnelCounts] = await Promise.all([
+    db.execute<{ count: number }>(sql`SELECT count(*)::int as count FROM leads WHERE created_at >= ${since30}`),
+    db.execute<{ count: number }>(sql`SELECT count(*)::int as count FROM leads WHERE created_at >= ${since30} AND status = 'fechado'`),
+    db.execute<{ campaign: string; count: number }>(sql`
+      SELECT COALESCE(utm_campaign, '(sem campanha)') as campaign, count(*)::int as count
+      FROM leads GROUP BY 1 ORDER BY count DESC LIMIT 8
+    `),
+    db.execute<{ day: string; count: number }>(sql`
+      SELECT to_char(date_trunc('day', created_at), 'DD/MM') as day, count(*)::int as count
+      FROM page_views WHERE created_at >= ${since30} GROUP BY date_trunc('day', created_at) ORDER BY date_trunc('day', created_at)
+    `),
+    db.execute<{ day: string; count: number }>(sql`
+      SELECT to_char(date_trunc('day', created_at), 'DD/MM') as day, count(*)::int as count
+      FROM leads WHERE created_at >= ${since30} GROUP BY date_trunc('day', created_at) ORDER BY date_trunc('day', created_at)
+    `),
+    Promise.all(
+      [1, 2, 3, 4, 5].map((step) =>
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(quizSessions)
+          .where(sql`${quizSessions.lastStep} >= ${step}`)
+      )
+    ),
+  ]);
+
+  const leadsCount = leadsCountResult.rows[0]?.count ?? 0;
+  const closedCount = closedCountResult.rows[0]?.count ?? 0;
+
+  const dayMap = new Map<string, { pageViews: number; leads: number }>();
+  for (const r of dailyPageViews.rows) dayMap.set(r.day, { pageViews: r.count, leads: 0 });
+  for (const r of dailyLeads.rows) {
+    const existing = dayMap.get(r.day) ?? { pageViews: 0, leads: 0 };
+    existing.leads = r.count;
+    dayMap.set(r.day, existing);
+  }
+  const daily = Array.from(dayMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, v]) => ({ label, pageViews: v.pageViews, leads: v.leads }));
+
+  const quizFunnel = funnelCounts.map((rows, i) => ({
+    label: `Passo ${i + 1}`,
+    count: rows[0]?.count ?? 0,
+  }));
+
+  return {
+    leadsCount,
+    quizFunnel,
+    campaignBreakdown: campaignRows.rows.map((r) => ({ label: r.campaign, count: r.count })),
+    daily,
+    // Aproximação: não há vínculo direto entre `leads` e `clients` no schema
+    // hoje — usamos status "fechado" como proxy de conversão. Ver relatório final.
+    leadToClientRate: leadsCount > 0 ? closedCount / leadsCount : 0,
+  };
+}
+
+export default async function AdminDashboardPage() {
+  const [operacao, linksData, leadsData] = await Promise.all([getOperacaoData(), getLinksData(), getLeadsData()]);
+
+  const operacaoSection = (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-black text-ink">
-            Dashboard
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
-          </h1>
-          <p className="text-sm text-muted">Visão geral de tráfego, cliques e leads.</p>
-        </div>
-        <div className="flex gap-1 rounded-xl border border-line bg-elevated/50 p-1">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                period === p.value
-                  ? "bg-brand-primary text-white"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile icon={Building2} label="Clientes ativos" value={String(operacao.clientesAtivos)} />
+        <StatTile icon={Layers} label="Entregas ativas" value={String(operacao.entregasAtivas)} />
+        <StatTile icon={AlertTriangle} label="Entregas travadas (>21d)" value={String(operacao.entregasTravadas)} />
+        <StatTile icon={Users} label="Oportunidades de upsell" value={String(operacao.oportunidades.length)} />
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile icon={Eye} label="Page views" value={totalPageViews.toLocaleString("pt-BR")} />
-        <StatTile
-          icon={MousePointerClick}
-          label="Cliques rastreados"
-          value={data.clicks.reduce((s, c) => s + c.count, 0).toLocaleString("pt-BR")}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-line bg-elevated/50 p-5">
+          <h3 className="mb-2 text-sm font-bold text-ink">Funil do Método Brain</h3>
+          <StageFunnelChart data={operacao.funil} />
+        </div>
+        <HorizontalBarList title="Clientes por produto" items={operacao.produtoRows.map((p) => ({ label: p.name, count: p.count }))} />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-line bg-elevated/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-ink">Clientes novos por mês</h3>
+        <TrendLineChart data={operacao.novosPorMes} series={[{ key: "clientes", name: "Clientes novos", color: "#2563eb" }]} />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-line bg-elevated/50 p-5">
+        <h3 className="mb-3 text-sm font-bold text-ink">Oportunidades (cliente × produto × motivo)</h3>
+        {operacao.oportunidades.length === 0 ? (
+          <p className="text-xs text-muted">Nenhum diagnóstico com recomendação ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {operacao.oportunidades.map((op, i) => (
+              <div key={i} className="rounded-xl border border-line bg-bg/40 p-3 text-xs">
+                <p className="font-bold text-ink">
+                  {op.cliente} <span className="text-brand-magenta">→ {op.produto}</span>
+                </p>
+                <p className="mt-0.5 text-muted">{op.motivo}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const linksSection = (
+    <div>
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <HorizontalBarList title="Ranking de links por cliques" items={linksData.linkRanking} />
+        <HorizontalBarList title="Páginas mais vistas" items={linksData.topPages} />
+      </div>
+      <div className="mb-4">
+        <HorizontalBarList title="Breakdown por campanha (UTM)" items={linksData.campaignBreakdown} />
+      </div>
+      <div className="rounded-2xl border border-line bg-elevated/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-ink">Evolução diária — page views × cliques (30 dias)</h3>
+        <TrendLineChart
+          data={linksData.daily}
+          series={[
+            { key: "pageViews", name: "Page views", color: "#2563eb" },
+            { key: "clicks", name: "Cliques", color: "#38bdf8" },
+          ]}
         />
-        <StatTile icon={Users} label="Leads gerados" value={data.leadsCount.toString()} />
+      </div>
+    </div>
+  );
+
+  const leadsSection = (
+    <div>
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile icon={Eye} label="Page views (30d)" value={String(leadsData.daily.reduce((s, d) => s + d.pageViews, 0))} />
+        <StatTile icon={MousePointerClick} label="Leads (30d)" value={String(leadsData.leadsCount)} />
         <StatTile
           icon={Percent}
           label="Conclusão do quiz"
-          value={`${Math.round(data.quizCompletionRate * 100)}%`}
+          value={`${leadsData.quizFunnel[0]?.count ? Math.round(((leadsData.quizFunnel[4]?.count ?? 0) / leadsData.quizFunnel[0].count) * 100) : 0}%`}
+        />
+        <StatTile icon={Link2} label="Lead → fechado (aprox.)" value={`${Math.round(leadsData.leadToClientRate * 100)}%`} />
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-line bg-elevated/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-ink">Evolução diária — page views × leads (30 dias)</h3>
+        <TrendLineChart
+          data={leadsData.daily}
+          series={[
+            { key: "pageViews", name: "Page views", color: "#2563eb" },
+            { key: "leads", name: "Leads", color: "#38bdf8" },
+          ]}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <HorizontalBarList title="Page views por página" items={data.pageViews} />
-        <HorizontalBarList title="Cliques por elemento" items={data.clicks} />
+        <div className="rounded-2xl border border-line bg-elevated/50 p-5">
+          <h3 className="mb-2 text-sm font-bold text-ink">Funil do quiz</h3>
+          <StageFunnelChart data={leadsData.quizFunnel.map((s) => ({ label: s.label, value: s.count }))} />
+        </div>
+        <HorizontalBarList title="Leads por campanha" items={leadsData.campaignBreakdown} />
       </div>
+    </div>
+  );
 
-      <div className="mt-4">
-        <QuizFunnel steps={data.quizFunnel} />
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl font-black text-ink">Dashboard</h1>
+        <p className="text-sm text-muted">Operação da agência, links e páginas, leads e conversão.</p>
       </div>
+      <DashboardTabs operacao={operacaoSection} links={linksSection} leads={leadsSection} />
     </div>
   );
 }

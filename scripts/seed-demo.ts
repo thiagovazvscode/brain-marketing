@@ -395,6 +395,10 @@ async function seedLinks(clientIds: Map<string, string>) {
   }
 
   const clickRows: (typeof linkClicks.$inferInsert)[] = [];
+  // Jornada pós-clique: parte das sessões de clique continua navegando pelo
+  // site com o MESMO sessionId — é o que a página de Links usa pra mostrar
+  // "depois do clique, vai mais pra". Sem isso o join nunca casa nenhuma linha.
+  const journeyRows: (typeof pageViews.$inferInsert)[] = [];
   for (const link of DEMO_LINKS) {
     const linkId = linkIds.get(link.slug)!;
     for (let dayIndex = 0; dayIndex < DAYS_OF_HISTORY; dayIndex++) {
@@ -403,22 +407,43 @@ async function seedLinks(clientIds: Map<string, string>) {
       const clicksToday = Math.max(0, Math.round(expected * (0.6 + Math.random() * 0.8)));
 
       for (let c = 0; c < clicksToday; c++) {
+        const sessionId = `${DEMO_SESSION_PREFIX}${daysBack}-${randomInt(1000, 9999)}`;
+        const clickedAt = daysAgo(daysBack);
         clickRows.push({
           linkId,
-          sessionId: `${DEMO_SESSION_PREFIX}${daysBack}-${randomInt(1000, 9999)}`,
+          sessionId,
           referrer: pick(["https://instagram.com", "https://whatsapp.com", "https://google.com", ""]),
           utmSource: link.campaign,
           utmMedium: "link-proprio",
           utmCampaign: link.campaign,
           userAgent: pick(["Mobile Safari", "Chrome Mobile", "Chrome Desktop", "Instagram App"]),
-          createdAt: daysAgo(daysBack),
+          createdAt: clickedAt,
         });
+
+        if (Math.random() < 0.65) {
+          const steps = randomInt(1, 3);
+          for (let s = 0; s < steps; s++) {
+            const viewedAt = new Date(clickedAt.getTime() + (s + 1) * randomInt(20, 180) * 1000);
+            journeyRows.push({
+              path: pick(PAGE_PATHS),
+              sessionId,
+              referrer: pick(["https://instagram.com", "https://whatsapp.com", "https://google.com", ""]),
+              utmSource: link.campaign,
+              utmMedium: "link-proprio",
+              utmCampaign: link.campaign,
+              createdAt: viewedAt,
+            });
+          }
+        }
       }
     }
   }
 
   await insertInBatches(linkClicks, clickRows);
-  console.log(`Links rastreáveis: ${linkIds.size} criado(s), ${clickRows.length} clique(s) em ${DAYS_OF_HISTORY} dias.`);
+  await insertInBatches(pageViews, journeyRows);
+  console.log(
+    `Links rastreáveis: ${linkIds.size} criado(s), ${clickRows.length} clique(s), ${journeyRows.length} page view(s) de jornada pós-clique em ${DAYS_OF_HISTORY} dias.`
+  );
 }
 
 async function seedTrafficAndLeads() {

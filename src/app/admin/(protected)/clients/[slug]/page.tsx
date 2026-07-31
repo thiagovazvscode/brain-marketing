@@ -5,6 +5,10 @@ import { clients, clientBriefings, clientProducts, products, clientDiagnostics }
 import { ClientProductsPanel } from "@/components/admin/ClientProductsPanel";
 import { ClientDiagnosticPanel } from "@/components/admin/ClientDiagnosticPanel";
 
+// Explícito por segurança — o slug já força renderização por request, mas
+// deixamos claro que esta página nunca deve ser servida como snapshot estático.
+export const dynamic = "force-dynamic";
+
 const TECHNICAL_KEYS = new Set(["client", "timestamp", "timestampFormatted"]);
 
 function humanizeKey(key: string): string {
