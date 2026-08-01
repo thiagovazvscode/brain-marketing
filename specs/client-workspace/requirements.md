@@ -1,5 +1,39 @@
 # Requirements — Plataforma de Operação da Brain (admin como sistema operacional)
 
+## Extensão — BRAIN OS Fase 1 (Auditoria e Fundação)
+
+Esta plataforma foi absorvida como o núcleo comercial/operacional do
+**BRAIN OS** ("Clientes, Operação, Métodos e Receita"), uma arquitetura maior
+cobrindo CRM comercial, contratos, playbooks, tarefas, agenda, financeiro e
+uma dashboard de comando — ver plano completo em
+`C:\Users\Gamerz\.claude\plans\atomic-discovering-pascal.md`. A Fase 1
+(auditoria e fundação) entregou, sobre o que já existia aqui:
+
+- `client_products` ("contrato vivo") ganhou colunas comerciais/operacionais:
+  `planId`, `negotiatedValue`, `billingType`/`billingCycle`/`billingDay`,
+  `installments`, `quantity`, `numberOfUsers`, `discount`, `contractTerm`,
+  `responsibleUserId`, `salespersonId`, `impactOnMrr` (MRR real, calculado em
+  `src/lib/billing.ts`), `onboardingStatus`, `implementationProgress`,
+  `operationalStatus`, `nextAction`, `nextActionDate`. Não foi criada uma
+  entidade nova — a nomenclatura/arquitetura existente já estava correta.
+- Nova tabela `product_plans` (plano por produto: cobrança, ciclo, preço-base).
+- `admin_users` ganhou `name`/`role` (enum `user_role`) — base pra
+  responsável/vendedor e permissão por papel futura.
+- Nova UI `/admin/products` (catálogo com CRUD real, antes só existia
+  leitura) e abas em `/admin/clients/[slug]` (Visão Geral com KPIs reais de
+  MRR/receita contratada/saúde/tempo de relacionamento, Produtos,
+  Diagnóstico, Histórico real, e placeholders "Em breve" pras seções que
+  pertencem às Fases 2–5 do BRAIN OS: Operação, Tarefas, Reuniões,
+  Contratos, Financeiro, Documentos).
+- Novo tema visual (`--os-*` em `globals.css`) — sidebar escura, conteúdo
+  claro, verde como cor de ação — escopado só ao `/admin`, sem alterar o
+  site institucional.
+- Deliberadamente fora desta Fase (ver plano pra fases seguintes): CRM
+  Kanban, fluxo completo "Nova Venda/Contratação" com geração automática de
+  contrato/playbook/projeto, Contratos/templates/PDF, Playbooks
+  configuráveis, Financeiro/parcelas, Tarefas, Agenda, Documentos,
+  Relatórios, permissões granulares, Motor de Próxima Ação.
+
 ## Contexto
 
 Esta versão substitui a anterior. O Bloco 1 (cadastro manual de cliente) já

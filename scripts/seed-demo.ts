@@ -2,6 +2,7 @@ import { eq, like, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   products,
+  productPlans,
   clients,
   clientProducts,
   clientStageHistory,
@@ -12,8 +13,10 @@ import {
   clickEvents,
   leads,
   quizSessions,
+  adminUsers,
 } from "@/db/schema";
 import { computeRecommendations } from "@/lib/diagnostics";
+import { computeImpactOnMrr } from "@/lib/billing";
 
 const DEMO_PREFIX = "demo-";
 const DEMO_SESSION_PREFIX = "demo-session-";
@@ -127,6 +130,26 @@ const DEMO_CLIENTS = [
 ] as const;
 
 const STAGE_ORDER = ["raio-x", "direcao", "estrutura", "motor-de-aquisicao", "curva-de-otimizacao"];
+
+// Preço/cobrança plausível por produto (dado de demonstração, não é preço
+// oficial) — usado pra popular os campos comerciais novos de client_products.
+const PRODUCT_PRICING: Record<string, { value: number; billingType: "recorrente" | "pontual"; billingCycle: string }> = {
+  "trafego-pago": { value: 1500, billingType: "recorrente", billingCycle: "mensal" },
+  posicionamento: { value: 1200, billingType: "recorrente", billingCycle: "mensal" },
+  "sites-landing-pages": { value: 4000, billingType: "pontual", billingCycle: "unico" },
+  audiovisual: { value: 2500, billingType: "pontual", billingCycle: "unico" },
+  "inteligencia-comercial": { value: 1800, billingType: "recorrente", billingCycle: "mensal" },
+  tecnologia: { value: 1000, billingType: "recorrente", billingCycle: "mensal" },
+};
+
+const NEXT_ACTIONS = [
+  "Aprovar novos criativos",
+  "Agendar reunião de otimização",
+  "Enviar relatório mensal",
+  "Solicitar acesso à conta de anúncios",
+  "Revisar plano de conteúdo",
+  "Importar imóveis no BrokerApps",
+];
 
 interface EngagementSeed {
   productSlug: string;
@@ -280,7 +303,7 @@ async function seedClients(): Promise<Map<string, string>> {
   return slugToId;
 }
 
-async function seedEngagements(clientIds: Map<string, string>, productIds: Map<string, string>) {
+async function seedEngagements(clientIds: Map<string, string>, productIds: Map<string, string>, adminUserId: string | null) {
   let engagementCount = 0;
   let historyCount = 0;
 
@@ -296,6 +319,42 @@ async function seedEngagements(clientIds: Map<string, string>, productIds: Map<s
       const totalSpanDays = eng.stuck ? randomInt(60, 100) : randomInt(20, 70);
       const startedAt = daysAgo(totalSpanDays);
 
+      const pricing = PRODUCT_PRICING[eng.productSlug] ?? { value: 1000, billingType: "recorrente" as const, billingCycle: "mensal" };
+      const isEnded = eng.status === "encerrado";
+      const isPaused = eng.status === "pausado";
+      const negotiatedValue = String(pricing.value);
+      const impactOnMrr = String(computeImpactOnMrr(pricing.billingType, isEnded ? null : negotiatedValue));
+
+      let onboardingStatus: string;
+      let implementationProgress: number;
+      let operationalStatus: string;
+      if (isEnded) {
+        onboardingStatus = "concluido";
+        implementationProgress = 100;
+        operationalStatus = "concluido";
+      } else if (isPaused) {
+        onboardingStatus = "concluido";
+        implementationProgress = randomInt(40, 70);
+        operationalStatus = "pausado";
+      } else if (eng.stuck) {
+        onboardingStatus = "incompleto";
+        implementationProgress = randomInt(20, 50);
+        operationalStatus = "bloqueado";
+      } else if (targetStageIndex <= 1) {
+        onboardingStatus = pick(["enviado", "concluido"] as const);
+        implementationProgress = randomInt(10, 40);
+        operationalStatus = targetStageIndex === 0 ? "onboarding" : "em-implantacao";
+      } else {
+        onboardingStatus = "concluido";
+        implementationProgress = randomInt(60, 100);
+        operationalStatus = "em-execucao";
+      }
+
+      // randomInt negativo faz daysAgo devolver uma data futura (some dias
+      // ainda por vir), positivo devolve uma data passada (ação vencida) —
+      // mistura de próximas ações futuras e atrasadas, de propósito.
+      const nextActionDate = !isEnded && !isPaused ? daysAgo(randomInt(-15, 10)).toISOString().slice(0, 10) : null;
+
       const [engagement] = await db
         .insert(clientProducts)
         .values({
@@ -306,6 +365,17 @@ async function seedEngagements(clientIds: Map<string, string>, productIds: Map<s
           startedAt: startedAt.toISOString().slice(0, 10),
           endedAt: eng.status === "encerrado" ? daysAgo(randomInt(1, 10)).toISOString().slice(0, 10) : null,
           createdAt: startedAt,
+          negotiatedValue,
+          billingType: pricing.billingType,
+          billingCycle: pricing.billingCycle as "mensal" | "trimestral" | "semestral" | "anual" | "unico",
+          billingDay: pricing.billingType === "recorrente" ? randomInt(1, 28) : null,
+          impactOnMrr,
+          responsibleUserId: Math.random() < 0.5 ? adminUserId : null,
+          onboardingStatus,
+          implementationProgress,
+          operationalStatus,
+          nextAction: !isEnded && !isPaused ? pick(NEXT_ACTIONS) : null,
+          nextActionDate,
         })
         .returning();
       engagementCount++;
@@ -527,6 +597,28 @@ async function seedTrafficAndLeads() {
   );
 }
 
+async function seedProductPlans(productIds: Map<string, string>) {
+  let created = 0;
+  for (const [slug, productId] of productIds.entries()) {
+    const pricing = PRODUCT_PRICING[slug];
+    if (!pricing) continue;
+
+    const [existing] = await db.select({ id: productPlans.id }).from(productPlans).where(eq(productPlans.productId, productId)).limit(1);
+    if (existing) continue;
+
+    await db.insert(productPlans).values({
+      productId,
+      name: "Padrão",
+      billingType: pricing.billingType,
+      billingCycle: pricing.billingCycle as "mensal" | "trimestral" | "semestral" | "anual" | "unico",
+      basePrice: String(pricing.value),
+      isDefault: true,
+    });
+    created++;
+  }
+  console.log(`Planos de produto: ${created} criado(s).`);
+}
+
 async function main() {
   if (await isCleanRun()) {
     await clean();
@@ -534,9 +626,11 @@ async function main() {
   }
 
   console.log("Rodando seed de demonstração...");
+  const [admin] = await db.select({ id: adminUsers.id }).from(adminUsers).limit(1);
   const productIds = await seedProducts();
   const clientIds = await seedClients();
-  await seedEngagements(clientIds, productIds);
+  await seedProductPlans(productIds);
+  await seedEngagements(clientIds, productIds, admin?.id ?? null);
   await seedDiagnostics(clientIds, productIds);
   await seedLinks(clientIds);
   await seedTrafficAndLeads();
