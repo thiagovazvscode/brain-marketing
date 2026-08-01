@@ -130,7 +130,7 @@ export default function AdminLeadsPage() {
                         <Phone className="h-3 w-3" /> {lead.phone}
                         {lead.email && (
                           <>
-                            <span className="mx-1 text-line">·</span>
+                            <span className="mx-1 text-os-border">·</span>
                             <Mail className="h-3 w-3" /> {lead.email}
                           </>
                         )}

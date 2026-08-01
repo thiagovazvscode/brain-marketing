@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, clientProducts, clientStageHistory, products } from "@/db/schema";
+import { computeImpactOnMrr } from "@/lib/billing";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -37,7 +38,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  let body: { productId?: string; notes?: string };
+  let body: {
+    productId?: string;
+    notes?: string;
+    negotiatedValue?: string;
+    billingType?: "recorrente" | "pontual";
+    billingCycle?: "mensal" | "trimestral" | "semestral" | "anual" | "unico";
+  };
   try {
     body = await request.json();
   } catch {
@@ -47,6 +54,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!body.productId) {
     return NextResponse.json({ error: "Produto é obrigatório." }, { status: 400 });
   }
+
+  const billingType = body.billingType ?? "recorrente";
 
   try {
     const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.slug, slug)).limit(1);
@@ -58,6 +67,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         clientId: client.id,
         productId: body.productId,
         notes: body.notes?.trim() || null,
+        negotiatedValue: body.negotiatedValue || null,
+        billingType,
+        billingCycle: body.billingCycle ?? "mensal",
+        impactOnMrr: String(computeImpactOnMrr(billingType, body.negotiatedValue ?? null)),
       })
       .returning();
 

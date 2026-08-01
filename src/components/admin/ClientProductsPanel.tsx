@@ -40,6 +40,9 @@ export function ClientProductsPanel({
 }) {
   const router = useRouter();
   const [addingProductId, setAddingProductId] = useState("");
+  const [negotiatedValue, setNegotiatedValue] = useState("");
+  const [billingType, setBillingType] = useState<"recorrente" | "pontual">("recorrente");
+  const [billingCycle, setBillingCycle] = useState<"mensal" | "trimestral" | "semestral" | "anual" | "unico">("mensal");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -53,7 +56,7 @@ export function ClientProductsPanel({
       const response = await fetch(`/api/admin/clients/${clientSlug}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: addingProductId }),
+        body: JSON.stringify({ productId: addingProductId, negotiatedValue, billingType, billingCycle }),
       });
       if (!response.ok) {
         const data = await response.json();
@@ -148,6 +151,27 @@ export function ClientProductsPanel({
                 </option>
               ))}
             </select>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Valor negociado (R$)"
+              value={negotiatedValue}
+              onChange={(e) => setNegotiatedValue(e.target.value)}
+              className={`${selectClass} w-36`}
+            />
+            <select value={billingType} onChange={(e) => setBillingType(e.target.value as typeof billingType)} className={selectClass}>
+              <option value="recorrente">Recorrente</option>
+              <option value="pontual">Pontual</option>
+            </select>
+            {billingType === "recorrente" && (
+              <select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value as typeof billingCycle)} className={selectClass}>
+                <option value="mensal">Mensal</option>
+                <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
+              </select>
+            )}
             <button
               type="submit"
               disabled={!addingProductId || submitting}

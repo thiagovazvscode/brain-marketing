@@ -1,184 +1,74 @@
-"use client";
+import { desc, eq, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { clients, clientBriefings } from "@/db/schema";
+import { ClientsListClient, type ClientRow } from "@/components/admin/ClientsListClient";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Loader2, ArrowRight, Phone, Plus, Pencil } from "lucide-react";
-import { ClientForm, type ClientFormValues } from "@/components/admin/ClientForm";
+// Contagem de briefings/MRR/saúde muda a cada request — sem isso o Next
+// pré-renderiza a lista no build e ela fica presa no snapshot do deploy.
+export const dynamic = "force-dynamic";
 
-interface ClientRow {
-  id: string;
-  slug: string;
-  name: string;
-  whatsapp: string | null;
-  enteredAt: string | null;
-  createdAt: string;
-  briefingsCount: number;
-  lastSubmittedAt: string | null;
-}
+type HealthRow = {
+  client_id: string;
+  mrr: string;
+  has_stuck: boolean;
+  has_overdue: boolean;
+  next_action_date: string | null;
+};
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function formatEnteredAt(iso: string | null) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
-}
-
-export default function AdminClientsPage() {
-  const [clients, setClients] = useState<ClientRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingSlug, setEditingSlug] = useState<string | null>(null);
-
-  async function loadClients() {
-    try {
-      const response = await fetch("/api/admin/clients");
-      const data = await response.json();
-      setClients(data.clients ?? []);
-    } catch {
-      // mantém a lista anterior em caso de falha
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/admin/clients")
-      .then((res) => res.json())
-      .then((data) => {
-        if (active) setClients(data.clients ?? []);
+async function getClients(): Promise<ClientRow[]> {
+  const [baseRows, healthResult] = await Promise.all([
+    db
+      .select({
+        id: clients.id,
+        slug: clients.slug,
+        name: clients.name,
+        whatsapp: clients.whatsapp,
+        enteredAt: clients.enteredAt,
+        createdAt: clients.createdAt,
+        briefingsCount: sql<number>`count(${clientBriefings.id})`,
+        lastSubmittedAt: sql<string | null>`max(${clientBriefings.submittedAt})`,
       })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
+      .from(clients)
+      .leftJoin(clientBriefings, eq(clientBriefings.clientId, clients.id))
+      .groupBy(clients.id)
+      .orderBy(desc(clients.createdAt)),
+    // "Saúde" é heurística derivada do que já existe (histórico de estágio +
+    // próxima ação da contratação) — não é um score fabricado nem uma coluna
+    // nova no schema.
+    db.execute<HealthRow>(sql`
+      SELECT
+        cp.client_id,
+        COALESCE(SUM(cp.impact_on_mrr), 0) as mrr,
+        bool_or(csh_last.last_change < now() - interval '21 days') as has_stuck,
+        bool_or(cp.next_action_date IS NOT NULL AND cp.next_action_date < current_date) as has_overdue,
+        min(cp.next_action_date) FILTER (WHERE cp.next_action_date >= current_date) as next_action_date
+      FROM client_products cp
+      LEFT JOIN LATERAL (
+        SELECT MAX(changed_at) as last_change FROM client_stage_history WHERE client_product_id = cp.id
+      ) csh_last ON true
+      WHERE cp.status = 'ativo'
+      GROUP BY cp.client_id
+    `),
+  ]);
+
+  const healthByClient = new Map(healthResult.rows.map((r) => [r.client_id, r]));
+
+  return baseRows.map((row) => {
+    const health = healthByClient.get(row.id);
+    let saude: "boa" | "atencao" | "critica" = "boa";
+    if (health?.has_stuck) saude = "critica";
+    else if (health?.has_overdue) saude = "atencao";
+
+    return {
+      ...row,
+      mrr: health?.mrr ?? "0",
+      saude,
+      nextActionDate: health?.next_action_date ?? null,
     };
-  }, []);
+  });
+}
 
-  async function handleCreate(values: ClientFormValues) {
-    const response = await fetch("/api/admin/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return { error: data.error ?? "Não foi possível criar o cliente." };
-    }
-    setShowCreateForm(false);
-    await loadClients();
-  }
-
-  async function handleEdit(slug: string, values: ClientFormValues) {
-    const response = await fetch(`/api/admin/clients/${slug}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: values.name, whatsapp: values.whatsapp, enteredAt: values.enteredAt || null }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return { error: data.error ?? "Não foi possível atualizar o cliente." };
-    }
-    setEditingSlug(null);
-    await loadClients();
-  }
-
-  return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-black text-os-ink">
-            Clientes
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-os-muted" />}
-          </h1>
-          <p className="text-sm text-os-muted">
-            Clientes da agência — cadastrados manualmente ou via briefing (/briefing/[cliente]).
-          </p>
-        </div>
-        {!showCreateForm && (
-          <button
-            onClick={() => {
-              setEditingSlug(null);
-              setShowCreateForm(true);
-            }}
-            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            Novo cliente
-          </button>
-        )}
-      </div>
-
-      {showCreateForm && (
-        <ClientForm mode="create" onSubmit={handleCreate} onCancel={() => setShowCreateForm(false)} />
-      )}
-
-      {!loading && clients.length === 0 && !showCreateForm && (
-        <p className="rounded-xl border border-os-border bg-os-card/30 px-4 py-6 text-center text-sm text-os-muted">
-          Nenhum cliente cadastrado ainda.
-        </p>
-      )}
-
-      <div className="space-y-2">
-        {clients.map((client) =>
-          editingSlug === client.slug ? (
-            <ClientForm
-              key={client.id}
-              mode="edit"
-              initialValues={{
-                name: client.name,
-                whatsapp: client.whatsapp ?? "",
-                enteredAt: client.enteredAt ? client.enteredAt.slice(0, 10) : "",
-                slug: client.slug,
-              }}
-              onSubmit={(values) => handleEdit(client.slug, values)}
-              onCancel={() => setEditingSlug(null)}
-            />
-          ) : (
-            <div
-              key={client.id}
-              className="flex items-center justify-between rounded-xl border border-os-border bg-os-card/40 px-4 py-3 transition hover:border-os-accent/50"
-            >
-              <Link href={`/admin/clients/${client.slug}`} className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-os-ink">{client.name}</p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-os-muted">
-                  {client.whatsapp && (
-                    <>
-                      <Phone className="h-3 w-3" /> {client.whatsapp}
-                      <span className="mx-1 text-line">·</span>
-                    </>
-                  )}
-                  {client.briefingsCount} briefing(s) · último em {formatDate(client.lastSubmittedAt)}
-                  {formatEnteredAt(client.enteredAt) && (
-                    <>
-                      <span className="mx-1 text-line">·</span>
-                      entrou em {formatEnteredAt(client.enteredAt)}
-                    </>
-                  )}
-                </p>
-              </Link>
-              <div className="flex shrink-0 items-center gap-3">
-                <button
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setEditingSlug(client.slug);
-                  }}
-                  className="text-os-muted hover:text-os-ink"
-                  aria-label={`Editar ${client.name}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <Link href={`/admin/clients/${client.slug}`}>
-                  <ArrowRight className="h-4 w-4 text-os-muted" />
-                </Link>
-              </div>
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  );
+export default async function AdminClientsPage() {
+  const clientRows = await getClients();
+  return <ClientsListClient clients={clientRows} />;
 }

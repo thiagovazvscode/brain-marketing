@@ -3,13 +3,27 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clientProducts, clientStageHistory, clientEngagementStatusEnum } from "@/db/schema";
 import { isValidMethodStage } from "@/lib/method-stages";
+import { computeImpactOnMrr, isValidOnboardingStatus, isValidOperationalStatus } from "@/lib/billing";
 
 const VALID_STATUSES = clientEngagementStatusEnum.enumValues;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  let body: { status?: string; currentStage?: string; notes?: string };
+  let body: {
+    status?: string;
+    currentStage?: string;
+    notes?: string;
+    negotiatedValue?: string;
+    billingType?: "recorrente" | "pontual";
+    billingCycle?: "mensal" | "trimestral" | "semestral" | "anual" | "unico";
+    responsibleUserId?: string;
+    onboardingStatus?: string;
+    implementationProgress?: number;
+    operationalStatus?: string;
+    nextAction?: string;
+    nextActionDate?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -35,6 +49,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.notes !== undefined) {
       updates.notes = body.notes?.trim() || null;
     }
+
+    if (body.negotiatedValue !== undefined || body.billingType !== undefined) {
+      const billingType = body.billingType ?? existing.billingType;
+      const negotiatedValue = body.negotiatedValue ?? existing.negotiatedValue;
+      if (body.negotiatedValue !== undefined) updates.negotiatedValue = body.negotiatedValue || null;
+      if (body.billingType !== undefined) updates.billingType = body.billingType;
+      updates.impactOnMrr = String(computeImpactOnMrr(billingType, negotiatedValue));
+    }
+    if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
+    if (body.responsibleUserId !== undefined) updates.responsibleUserId = body.responsibleUserId || null;
+    if (body.onboardingStatus !== undefined) {
+      if (!isValidOnboardingStatus(body.onboardingStatus)) {
+        return NextResponse.json({ error: "Status de onboarding inválido." }, { status: 400 });
+      }
+      updates.onboardingStatus = body.onboardingStatus;
+    }
+    if (body.implementationProgress !== undefined) {
+      updates.implementationProgress = Math.max(0, Math.min(100, body.implementationProgress));
+    }
+    if (body.operationalStatus !== undefined) {
+      if (!isValidOperationalStatus(body.operationalStatus)) {
+        return NextResponse.json({ error: "Status operacional inválido." }, { status: 400 });
+      }
+      updates.operationalStatus = body.operationalStatus;
+    }
+    if (body.nextAction !== undefined) updates.nextAction = body.nextAction.trim() || null;
+    if (body.nextActionDate !== undefined) updates.nextActionDate = body.nextActionDate || null;
 
     let stageChanged = false;
     if (body.currentStage !== undefined && body.currentStage !== existing.currentStage) {
