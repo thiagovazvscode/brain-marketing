@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const leadStatusEnum = pgEnum("lead_status", ["novo", "contatado", "fechado", "perdido"]);
@@ -463,4 +463,161 @@ export const sales = pgTable("sales", {
   totalOneTime: numeric("total_one_time", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ── Métodos & Execução — Etapa 1: fundação (specs/metodos-execucao) ────────
+//
+// Método e Playbook ainda são MODELOS configuráveis nesta etapa — não são
+// aplicados a cliente e não geram tarefa real. Isso é a Etapa 2
+// (PlaybookInstance/StageInstance/TaskInstance), fora de escopo aqui.
+
+// Pequeno e estável (controla a regra de versionamento), compartilhado por
+// method e playbook — evita dois enums quase idênticos.
+export const contentStatusEnum = pgEnum("content_status", [
+  "rascunho",
+  "em_revisao",
+  "publicado",
+  "arquivado",
+]);
+
+// Os 9 valores vêm explícitos do pedido — conjunto fixo, por isso enum
+// (diferente de category/resource type, que crescem com o negócio e ficam
+// como texto validado em src/lib/methods.ts).
+export const playbookTypeEnum = pgEnum("playbook_type", [
+  "implantacao",
+  "diagnostico",
+  "projeto",
+  "recorrente",
+  "treinamento",
+  "acompanhamento",
+  "manutencao",
+  "renovacao",
+  "encerramento",
+]);
+
+// Entidade central do módulo. Guarda o estado CORRENTE editável — publicar ou
+// arquivar grava um snapshot em methodVersions (ver transitionToDraft em
+// src/lib/methods.ts) em vez de versionar campo a campo.
+export const methods = pgTable("methods", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  shortDescription: text("short_description"),
+  fullDescription: text("full_description"),
+  category: text("category"),
+  problemSolved: text("problem_solved"),
+  idealClientProfile: text("ideal_client_profile"),
+  expectedResult: text("expected_result"),
+  principles: jsonb("principles").$type<string[]>().notNull().default([]),
+  premises: jsonb("premises").$type<string[]>().notNull().default([]),
+  successIndicators: jsonb("success_indicators").$type<string[]>().notNull().default([]),
+  risks: jsonb("risks").$type<string[]>().notNull().default([]),
+  status: contentStatusEnum("status").notNull().default("rascunho"),
+  version: text("version").notNull().default("1.0"),
+  authorId: uuid("author_id").references(() => adminUsers.id),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// N:N método↔produto — mesmo padrão de opportunityProducts. Playbook, ao
+// contrário, relaciona 1 produto só (playbooks.productId), por isso não tem
+// tabela de junção equivalente.
+export const methodProducts = pgTable(
+  "method_products",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    methodId: uuid("method_id").notNull().references(() => methods.id),
+    productId: uuid("product_id").notNull().references(() => products.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("method_products_method_product_idx").on(table.methodId, table.productId)]
+);
+
+// Macroetapas estratégicas (aba Estrutura). Mutáveis direto no método
+// corrente — o snapshot completo entra no jsonb de methodVersions no momento
+// da publicação, o que não impede comparação estruturada numa fase futura.
+export const methodStages = pgTable("method_stages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  methodId: uuid("method_id").notNull().references(() => methods.id),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  objective: text("objective"),
+  description: text("description"),
+  expectedResult: text("expected_result"),
+  successCriteria: text("success_criteria"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Log de versões — gravado ao publicar ou arquivar um método (nunca ao
+// simples editar um rascunho). Sem comparação avançada entre versões nesta
+// etapa: snapshot serve para listagem e para restaurar o estado publicado
+// antes de virar rascunho de novo (transitionToDraft).
+export const methodVersions = pgTable("method_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  methodId: uuid("method_id").notNull().references(() => methods.id),
+  versionLabel: text("version_label").notNull(),
+  status: contentStatusEnum("status").notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  changeNote: text("change_note"),
+  authorId: uuid("author_id").references(() => adminUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Entidade central de playbook. Mesma lógica de "estado corrente" do method.
+// productId é obrigatório e único (não N:N) — o pedido fala em "produto
+// relacionado" no singular para playbook.
+export const playbooks = pgTable("playbooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  objective: text("objective"),
+  methodId: uuid("method_id").notNull().references(() => methods.id),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  type: playbookTypeEnum("type").notNull().default("implantacao"),
+  defaultDurationDays: integer("default_duration_days"),
+  prerequisites: jsonb("prerequisites").$type<string[]>().notNull().default([]),
+  expectedResult: text("expected_result"),
+  // Papéis em texto livre (ex.: "Gestor de Tráfego"), não FK para admin_users
+  // — é responsável PADRÃO do modelo, não uma pessoa específica.
+  defaultResponsibles: jsonb("default_responsibles").$type<string[]>().notNull().default([]),
+  requiredDocuments: jsonb("required_documents").$type<string[]>().notNull().default([]),
+  deliverables: jsonb("deliverables").$type<string[]>().notNull().default([]),
+  successCriteria: jsonb("success_criteria").$type<string[]>().notNull().default([]),
+  status: contentStatusEnum("status").notNull().default("rascunho"),
+  version: text("version").notNull().default("1.0"),
+  authorId: uuid("author_id").references(() => adminUsers.id),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Mesmo padrão de methodVersions.
+export const playbookVersions = pgTable("playbook_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  playbookId: uuid("playbook_id").notNull().references(() => playbooks.id),
+  versionLabel: text("version_label").notNull(),
+  status: contentStatusEnum("status").notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  changeNote: text("change_note"),
+  authorId: uuid("author_id").references(() => adminUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Biblioteca de recursos/modelos — estrutura inicial nesta etapa (sem CRUD
+// completo). Uma tabela só para método e playbook (diferença é qual FK está
+// preenchida), mesmo raciocínio de opportunityActivities cobrir vários tipos.
+export const resources = pgTable("resources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  type: text("type").notNull().default("outro"),
+  url: text("url"),
+  description: text("description"),
+  methodId: uuid("method_id").references(() => methods.id),
+  playbookId: uuid("playbook_id").references(() => playbooks.id),
+  authorId: uuid("author_id").references(() => adminUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

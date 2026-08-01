@@ -43,7 +43,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/crm", label: "CRM Comercial", icon: Target },
   { href: "/admin/clients", label: "Clientes", icon: Building2 },
   { href: "/admin/products", label: "Produtos e Planos", icon: Package },
-  { href: "/admin/playbooks", label: "Métodos e Playbooks", icon: Workflow, comingSoon: true },
+  { href: "/admin/metodos", label: "Métodos & Execução", icon: Workflow },
   { href: "/admin/operations", label: "Operações", icon: Activity, comingSoon: true },
   { href: "/admin/tasks", label: "Tarefas", icon: CheckSquare, comingSoon: true },
   { href: "/admin/contracts", label: "Contratos", icon: FileText, comingSoon: true },
