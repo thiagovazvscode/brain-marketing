@@ -90,11 +90,11 @@ export default function AdminClientsPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-black text-ink">
+          <h1 className="flex items-center gap-2 text-xl font-black text-os-ink">
             Clientes
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-os-muted" />}
           </h1>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-os-muted">
             Clientes da agência — cadastrados manualmente ou via briefing (/briefing/[cliente]).
           </p>
         </div>
@@ -117,7 +117,7 @@ export default function AdminClientsPage() {
       )}
 
       {!loading && clients.length === 0 && !showCreateForm && (
-        <p className="rounded-xl border border-line bg-elevated/30 px-4 py-6 text-center text-sm text-muted">
+        <p className="rounded-xl border border-os-border bg-os-card/30 px-4 py-6 text-center text-sm text-os-muted">
           Nenhum cliente cadastrado ainda.
         </p>
       )}
@@ -140,11 +140,11 @@ export default function AdminClientsPage() {
           ) : (
             <div
               key={client.id}
-              className="flex items-center justify-between rounded-xl border border-line bg-elevated/40 px-4 py-3 transition hover:border-brand-primary/50"
+              className="flex items-center justify-between rounded-xl border border-os-border bg-os-card/40 px-4 py-3 transition hover:border-os-accent/50"
             >
               <Link href={`/admin/clients/${client.slug}`} className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">{client.name}</p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                <p className="text-sm font-semibold text-os-ink">{client.name}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-os-muted">
                   {client.whatsapp && (
                     <>
                       <Phone className="h-3 w-3" /> {client.whatsapp}
@@ -166,13 +166,13 @@ export default function AdminClientsPage() {
                     setShowCreateForm(false);
                     setEditingSlug(client.slug);
                   }}
-                  className="text-muted hover:text-ink"
+                  className="text-os-muted hover:text-os-ink"
                   aria-label={`Editar ${client.name}`}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
                 <Link href={`/admin/clients/${client.slug}`}>
-                  <ArrowRight className="h-4 w-4 text-muted" />
+                  <ArrowRight className="h-4 w-4 text-os-muted" />
                 </Link>
               </div>
             </div>

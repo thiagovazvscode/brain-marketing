@@ -6,17 +6,17 @@ export function StageFunnelChart({ data }: { data: { label: string; value: numbe
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1c2230" />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8b95a7" }} axisLine={{ stroke: "#1c2230" }} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#8b95a7" }} axisLine={false} tickLine={false} allowDecimals={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e3e7ec" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#667085" }} axisLine={{ stroke: "#e3e7ec" }} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#667085" }} axisLine={false} tickLine={false} allowDecimals={false} />
         <Tooltip
-          contentStyle={{ background: "#0d1017", border: "1px solid #1c2230", borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: "#f2f4f8" }}
-          cursor={{ fill: "rgba(37,99,235,0.08)" }}
+          contentStyle={{ background: "#ffffff", border: "1px solid #e3e7ec", borderRadius: 8, fontSize: 12 }}
+          labelStyle={{ color: "#101828" }}
+          cursor={{ fill: "rgba(22,163,74,0.08)" }}
         />
         <Bar dataKey="value" radius={[6, 6, 0, 0]}>
           {data.map((_, i) => (
-            <Cell key={i} fill={i % 2 === 0 ? "#2563eb" : "#38bdf8"} />
+            <Cell key={i} fill={i % 2 === 0 ? "#16a34a" : "#4ade80"} />
           ))}
         </Bar>
       </BarChart>

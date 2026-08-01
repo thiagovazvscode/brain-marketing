@@ -67,8 +67,8 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-black text-ink">{client.name}</h1>
-        <p className="text-sm text-muted">
+        <h1 className="text-xl font-black text-os-ink">{client.name}</h1>
+        <p className="text-sm text-os-muted">
           {client.whatsapp ? `${client.whatsapp} · ` : ""}
           {client.enteredAt && `Cliente desde ${new Date(client.enteredAt).toLocaleDateString("pt-BR", { timeZone: "UTC" })} · `}
           {briefings.length} briefing(s) registrado(s)
@@ -76,8 +76,8 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
       </div>
 
       <div className="space-y-6">
-        <section className="rounded-2xl border border-line bg-elevated/40 p-5">
-          <h2 className="mb-4 font-display text-sm font-bold uppercase tracking-wide text-ink">Produtos</h2>
+        <section className="rounded-2xl border border-os-border bg-os-card/40 p-5">
+          <h2 className="mb-4 font-display text-sm font-bold uppercase tracking-wide text-os-ink">Produtos</h2>
           <ClientProductsPanel
             clientSlug={slug}
             engagements={engagementRows}
@@ -85,22 +85,22 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
           />
         </section>
 
-        <section className="rounded-2xl border border-line bg-elevated/40 p-5">
-          <h2 className="mb-4 font-display text-sm font-bold uppercase tracking-wide text-ink">Diagnóstico</h2>
+        <section className="rounded-2xl border border-os-border bg-os-card/40 p-5">
+          <h2 className="mb-4 font-display text-sm font-bold uppercase tracking-wide text-os-ink">Diagnóstico</h2>
           <ClientDiagnosticPanel clientSlug={slug} diagnostics={diagnosticRows} />
         </section>
 
         <section>
-          <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-ink">Briefings</h2>
+          <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-os-ink">Briefings</h2>
           {briefings.length === 0 && (
-            <p className="rounded-xl border border-line bg-elevated/30 px-4 py-6 text-center text-sm text-muted">
+            <p className="rounded-xl border border-os-border bg-os-card/30 px-4 py-6 text-center text-sm text-os-muted">
               Nenhum briefing preenchido ainda para este cliente.
             </p>
           )}
           <div className="space-y-4">
             {briefings.map((briefing) => (
-              <div key={briefing.id} className="rounded-2xl border border-line bg-elevated/40 p-5">
-                <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-brand-magenta">
+              <div key={briefing.id} className="rounded-2xl border border-os-border bg-os-card/40 p-5">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-os-accent">
                   Preenchido em {formatDate(briefing.submittedAt)}
                 </p>
                 <dl className="space-y-1.5">
@@ -108,8 +108,8 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
                     .filter(([key]) => !TECHNICAL_KEYS.has(key))
                     .map(([key, value]) => (
                       <div key={key} className="flex flex-col gap-0.5 text-sm sm:flex-row sm:gap-2">
-                        <dt className="shrink-0 font-medium text-muted sm:w-56">{humanizeKey(key)}</dt>
-                        <dd className="whitespace-pre-wrap text-ink/90">{formatValue(value)}</dd>
+                        <dt className="shrink-0 font-medium text-os-muted sm:w-56">{humanizeKey(key)}</dt>
+                        <dd className="whitespace-pre-wrap text-os-ink/90">{formatValue(value)}</dd>
                       </div>
                     ))}
                 </dl>

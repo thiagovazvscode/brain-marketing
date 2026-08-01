@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 
 const inputClass =
-  "rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-muted/60 focus:border-brand-primary focus:outline-none";
+  "rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink placeholder:text-os-muted/60 focus:border-os-accent focus:outline-none";
 
 export function CreateLinkForm({ clients }: { clients: { id: string; name: string }[] }) {
   const router = useRouter();
@@ -42,7 +42,7 @@ export function CreateLinkForm({ clients }: { clients: { id: string; name: strin
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-6 rounded-2xl border border-line bg-elevated/50 p-5">
+    <form onSubmit={handleSubmit} className="mb-6 rounded-2xl border border-os-border bg-os-card/50 p-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <input
           value={label}

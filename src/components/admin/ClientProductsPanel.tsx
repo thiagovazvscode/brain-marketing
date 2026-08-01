@@ -6,7 +6,7 @@ import { Loader2, Plus } from "lucide-react";
 import { METHOD_STAGES } from "@/lib/method-stages";
 
 const selectClass =
-  "rounded-lg border border-line bg-bg/60 px-2.5 py-1.5 text-xs font-semibold text-ink focus:border-brand-primary focus:outline-none";
+  "rounded-lg border border-os-border bg-os-bg/60 px-2.5 py-1.5 text-xs font-semibold text-os-ink focus:border-os-accent focus:outline-none";
 
 export interface EngagementRow {
   id: string;
@@ -84,19 +84,19 @@ export function ClientProductsPanel({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Contratados</h3>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-os-muted">Contratados</h3>
         {engagements.length === 0 ? (
-          <p className="text-sm text-muted">Nenhum produto contratado ainda.</p>
+          <p className="text-sm text-os-muted">Nenhum produto contratado ainda.</p>
         ) : (
           <div className="space-y-2">
             {engagements.map((eng) => (
-              <div key={eng.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-elevated/40 px-4 py-3">
+              <div key={eng.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-os-border bg-os-card/40 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-os-ink">
                     <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[eng.status]}`} />
                     {eng.productName}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted">
+                  <p className="mt-0.5 text-xs text-os-muted">
                     {STATUS_LABEL[eng.status]} · desde {new Date(eng.startedAt).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
                   </p>
                 </div>
@@ -131,9 +131,9 @@ export function ClientProductsPanel({
       </div>
 
       <div>
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-magenta">Oportunidades de upsell</h3>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-os-accent">Oportunidades de upsell</h3>
         {upsellCandidates.length === 0 ? (
-          <p className="text-sm text-muted">Cliente já tem todo o catálogo ativo.</p>
+          <p className="text-sm text-os-muted">Cliente já tem todo o catálogo ativo.</p>
         ) : (
           <form onSubmit={handleAdd} className="flex flex-wrap items-center gap-2">
             <select

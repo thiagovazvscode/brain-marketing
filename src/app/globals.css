@@ -14,6 +14,26 @@
   --color-brand-magenta: #38bdf8;
   --color-brand-pink: #64748b;
 
+  /* Brain OS — tema claro/verde do painel administrativo, escopado por
+     convenção de nome (utilities "os-*") e usado só dentro de /admin. O site
+     institucional (acima) continua 100% escuro, intocado. */
+  --color-os-bg: #f4f6f8;
+  --color-os-card: #ffffff;
+  --color-os-border: #e3e7ec;
+  --color-os-ink: #101828;
+  --color-os-muted: #667085;
+  --color-os-sidebar: #0b0f17;
+  --color-os-sidebar-hover: #161c27;
+  --color-os-sidebar-line: #232a38;
+  --color-os-sidebar-ink: #f2f4f8;
+  --color-os-sidebar-muted: #8b95a7;
+  --color-os-accent: #16a34a;
+  --color-os-accent-soft: #dcfce7;
+  --color-os-warning: #d97706;
+  --color-os-warning-soft: #fef3c7;
+  --color-os-danger: #dc2626;
+  --color-os-danger-soft: #fee2e2;
+
   /* Tipografia */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui,
@@ -110,6 +130,12 @@
 
 :root {
   color-scheme: dark;
+}
+
+/* Brain OS (painel /admin) é claro — controles nativos (scrollbar, inputs)
+   devem seguir o esquema claro só dentro dessa área, sem afetar o site. */
+.brain-os {
+  color-scheme: light;
 }
 
 html {

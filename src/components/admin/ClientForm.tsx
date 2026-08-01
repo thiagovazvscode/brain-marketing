@@ -4,9 +4,9 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { slugify } from "@/lib/utils";
 
-const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted";
+const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-wide text-os-muted";
 const inputClass =
-  "w-full rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-muted/60 focus:border-brand-primary focus:outline-none";
+  "w-full rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink placeholder:text-os-muted/60 focus:border-os-accent focus:outline-none";
 
 export interface ClientFormValues {
   name: string;
@@ -61,7 +61,7 @@ export function ClientForm({ mode, initialValues, onSubmit, onCancel }: ClientFo
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-6 rounded-2xl border border-line bg-elevated/50 p-5"
+      className="mb-6 rounded-2xl border border-os-border bg-os-card/50 p-5"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
@@ -96,7 +96,7 @@ export function ClientForm({ mode, initialValues, onSubmit, onCancel }: ClientFo
 
         <div>
           <label className={labelClass}>
-            Slug {mode === "edit" && <span className="normal-case text-muted/60">(travado após criação)</span>}
+            Slug {mode === "edit" && <span className="normal-case text-os-muted/60">(travado após criação)</span>}
           </label>
           <input
             value={slug}
@@ -124,7 +124,7 @@ export function ClientForm({ mode, initialValues, onSubmit, onCancel }: ClientFo
         <button
           type="button"
           onClick={onCancel}
-          className="text-sm font-semibold text-muted hover:text-ink"
+          className="text-sm font-semibold text-os-muted hover:text-os-ink"
         >
           Cancelar
         </button>

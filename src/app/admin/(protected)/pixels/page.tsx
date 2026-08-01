@@ -76,23 +76,23 @@ export default function AdminPixelsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-xl font-black text-ink">
+        <h1 className="flex items-center gap-2 text-xl font-black text-os-ink">
           Pixels
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-os-muted" />}
         </h1>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-os-muted">
           Cadastre um pixel (Meta ou GA4) por página para injetar o script automaticamente.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-line bg-elevated/50 p-5 sm:grid-cols-[1fr_1fr_2fr_auto]"
+        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-os-border bg-os-card/50 p-5 sm:grid-cols-[1fr_1fr_2fr_auto]"
       >
         <select
           value={pagePath}
           onChange={(e) => setPagePath(e.target.value)}
-          className="rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink focus:border-brand-primary focus:outline-none"
+          className="rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink focus:border-os-accent focus:outline-none"
         >
           {PAGE_OPTIONS.map((p) => (
             <option key={p} value={p}>
@@ -104,7 +104,7 @@ export default function AdminPixelsPage() {
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value as PixelProvider)}
-          className="rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink focus:border-brand-primary focus:outline-none"
+          className="rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink focus:border-os-accent focus:outline-none"
         >
           <option value="meta">Meta Pixel</option>
           <option value="ga4">GA4</option>
@@ -114,7 +114,7 @@ export default function AdminPixelsPage() {
           value={pixelId}
           onChange={(e) => setPixelId(e.target.value)}
           placeholder="ID do pixel / measurement ID"
-          className="rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-muted/60 focus:border-brand-primary focus:outline-none"
+          className="rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink placeholder:text-os-muted/60 focus:border-os-accent focus:outline-none"
         />
 
         <button
@@ -128,33 +128,33 @@ export default function AdminPixelsPage() {
 
       <div className="space-y-2">
         {!loading && pixels.length === 0 && (
-          <p className="rounded-xl border border-line bg-elevated/30 px-4 py-6 text-center text-sm text-muted">
+          <p className="rounded-xl border border-os-border bg-os-card/30 px-4 py-6 text-center text-sm text-os-muted">
             Nenhum pixel configurado ainda.
           </p>
         )}
         {pixels.map((p) => (
           <div
             key={p.id}
-            className="flex items-center justify-between rounded-xl border border-line bg-elevated/40 px-4 py-3"
+            className="flex items-center justify-between rounded-xl border border-os-border bg-os-card/40 px-4 py-3"
           >
             <div className="flex items-center gap-3">
-              <span className="rounded-md bg-brand-primary/15 px-2 py-1 text-xs font-bold text-brand-magenta">
+              <span className="rounded-md bg-os-accent/15 px-2 py-1 text-xs font-bold text-os-accent">
                 {p.provider === "meta" ? "Meta" : "GA4"}
               </span>
               <div>
-                <p className="text-sm font-semibold text-ink">{p.pagePath}</p>
-                <p className="text-xs text-muted">{p.pixelId}</p>
+                <p className="text-sm font-semibold text-os-ink">{p.pagePath}</p>
+                <p className="text-xs text-os-muted">{p.pixelId}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => toggle(p.id)} className="text-muted hover:text-ink">
+              <button onClick={() => toggle(p.id)} className="text-os-muted hover:text-os-ink">
                 {p.enabled ? (
                   <ToggleRight className="h-6 w-6 text-emerald-400" />
                 ) : (
                   <ToggleLeft className="h-6 w-6" />
                 )}
               </button>
-              <button onClick={() => remove(p.id)} className="text-muted hover:text-red-400">
+              <button onClick={() => remove(p.id)} className="text-os-muted hover:text-red-400">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>

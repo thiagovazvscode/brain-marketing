@@ -20,12 +20,12 @@ export function TrendLineChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line, #1c2230)" />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8b95a7" }} axisLine={{ stroke: "#1c2230" }} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#8b95a7" }} axisLine={false} tickLine={false} allowDecimals={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e3e7ec" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#667085" }} axisLine={{ stroke: "#e3e7ec" }} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: "#667085" }} axisLine={false} tickLine={false} allowDecimals={false} />
         <Tooltip
-          contentStyle={{ background: "#0d1017", border: "1px solid #1c2230", borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: "#f2f4f8" }}
+          contentStyle={{ background: "#ffffff", border: "1px solid #e3e7ec", borderRadius: 8, fontSize: 12 }}
+          labelStyle={{ color: "#101828" }}
         />
         {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
         {series.map((s) => (

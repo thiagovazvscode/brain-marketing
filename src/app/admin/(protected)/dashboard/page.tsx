@@ -208,30 +208,30 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-          <h3 className="mb-2 text-sm font-bold text-ink">Funil do Método Brain</h3>
+        <div className="rounded-2xl border border-os-border bg-os-card/50 p-5">
+          <h3 className="mb-2 text-sm font-bold text-os-ink">Funil do Método Brain</h3>
           <StageFunnelChart data={operacao.funil} />
         </div>
         <HorizontalBarList title="Clientes por produto" items={operacao.produtoRows.map((p) => ({ label: p.name, count: p.count }))} />
       </div>
 
-      <div className="mt-4 rounded-2xl border border-line bg-elevated/50 p-5">
-        <h3 className="mb-2 text-sm font-bold text-ink">Clientes novos por mês</h3>
-        <TrendLineChart data={operacao.novosPorMes} series={[{ key: "clientes", name: "Clientes novos", color: "#2563eb" }]} />
+      <div className="mt-4 rounded-2xl border border-os-border bg-os-card/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-os-ink">Clientes novos por mês</h3>
+        <TrendLineChart data={operacao.novosPorMes} series={[{ key: "clientes", name: "Clientes novos", color: "#16a34a" }]} />
       </div>
 
-      <div className="mt-4 rounded-2xl border border-line bg-elevated/50 p-5">
-        <h3 className="mb-3 text-sm font-bold text-ink">Oportunidades (cliente × produto × motivo)</h3>
+      <div className="mt-4 rounded-2xl border border-os-border bg-os-card/50 p-5">
+        <h3 className="mb-3 text-sm font-bold text-os-ink">Oportunidades (cliente × produto × motivo)</h3>
         {operacao.oportunidades.length === 0 ? (
-          <p className="text-xs text-muted">Nenhum diagnóstico com recomendação ainda.</p>
+          <p className="text-xs text-os-muted">Nenhum diagnóstico com recomendação ainda.</p>
         ) : (
           <div className="space-y-2">
             {operacao.oportunidades.map((op, i) => (
-              <div key={i} className="rounded-xl border border-line bg-bg/40 p-3 text-xs">
-                <p className="font-bold text-ink">
-                  {op.cliente} <span className="text-brand-magenta">→ {op.produto}</span>
+              <div key={i} className="rounded-xl border border-os-border bg-os-bg/40 p-3 text-xs">
+                <p className="font-bold text-os-ink">
+                  {op.cliente} <span className="text-os-accent">→ {op.produto}</span>
                 </p>
-                <p className="mt-0.5 text-muted">{op.motivo}</p>
+                <p className="mt-0.5 text-os-muted">{op.motivo}</p>
               </div>
             ))}
           </div>
@@ -249,13 +249,13 @@ export default async function AdminDashboardPage() {
       <div className="mb-4">
         <HorizontalBarList title="Breakdown por campanha (UTM)" items={linksData.campaignBreakdown} />
       </div>
-      <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-        <h3 className="mb-2 text-sm font-bold text-ink">Evolução diária — page views × cliques (30 dias)</h3>
+      <div className="rounded-2xl border border-os-border bg-os-card/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-os-ink">Evolução diária — page views × cliques (30 dias)</h3>
         <TrendLineChart
           data={linksData.daily}
           series={[
-            { key: "pageViews", name: "Page views", color: "#2563eb" },
-            { key: "clicks", name: "Cliques", color: "#38bdf8" },
+            { key: "pageViews", name: "Page views", color: "#16a34a" },
+            { key: "clicks", name: "Cliques", color: "#86efac" },
           ]}
         />
       </div>
@@ -275,20 +275,20 @@ export default async function AdminDashboardPage() {
         <StatTile icon={Link2} label="Lead → fechado (aprox.)" value={`${Math.round(leadsData.leadToClientRate * 100)}%`} />
       </div>
 
-      <div className="mb-4 rounded-2xl border border-line bg-elevated/50 p-5">
-        <h3 className="mb-2 text-sm font-bold text-ink">Evolução diária — page views × leads (30 dias)</h3>
+      <div className="mb-4 rounded-2xl border border-os-border bg-os-card/50 p-5">
+        <h3 className="mb-2 text-sm font-bold text-os-ink">Evolução diária — page views × leads (30 dias)</h3>
         <TrendLineChart
           data={leadsData.daily}
           series={[
-            { key: "pageViews", name: "Page views", color: "#2563eb" },
-            { key: "leads", name: "Leads", color: "#38bdf8" },
+            { key: "pageViews", name: "Page views", color: "#16a34a" },
+            { key: "leads", name: "Leads", color: "#86efac" },
           ]}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-line bg-elevated/50 p-5">
-          <h3 className="mb-2 text-sm font-bold text-ink">Funil do quiz</h3>
+        <div className="rounded-2xl border border-os-border bg-os-card/50 p-5">
+          <h3 className="mb-2 text-sm font-bold text-os-ink">Funil do quiz</h3>
           <StageFunnelChart data={leadsData.quizFunnel.map((s) => ({ label: s.label, value: s.count }))} />
         </div>
         <HorizontalBarList title="Leads por campanha" items={leadsData.campaignBreakdown} />
@@ -299,8 +299,8 @@ export default async function AdminDashboardPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-black text-ink">Dashboard</h1>
-        <p className="text-sm text-muted">Operação da agência, links e páginas, leads e conversão.</p>
+        <h1 className="text-xl font-black text-os-ink">Dashboard</h1>
+        <p className="text-sm text-os-muted">Operação da agência, links e páginas, leads e conversão.</p>
       </div>
       <DashboardTabs operacao={operacaoSection} links={linksSection} leads={leadsSection} />
     </div>

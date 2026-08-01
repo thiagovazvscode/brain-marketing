@@ -78,7 +78,7 @@ export default function AdminLeadsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted">
+      <div className="flex items-center gap-2 text-sm text-os-muted">
         <Loader2 className="h-4 w-4 animate-spin" /> Carregando leads...
       </div>
     );
@@ -88,13 +88,13 @@ export default function AdminLeadsPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black text-ink">Leads</h1>
-          <p className="text-sm text-muted">{filtered.length} lead(s) nesse filtro.</p>
+          <h1 className="text-xl font-black text-os-ink">Leads</h1>
+          <p className="text-sm text-os-muted">{filtered.length} lead(s) nesse filtro.</p>
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "todos")}
-          className="rounded-lg border border-line bg-elevated/60 px-3 py-2 text-xs font-bold text-ink focus:border-brand-primary focus:outline-none"
+          className="rounded-lg border border-os-border bg-os-card/60 px-3 py-2 text-xs font-bold text-os-ink focus:border-os-accent focus:outline-none"
         >
           <option value="todos">Todos os status</option>
           {STATUS_OPTIONS.map((o) => (
@@ -105,10 +105,10 @@ export default function AdminLeadsPage() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-line">
+      <div className="overflow-hidden rounded-2xl border border-os-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-line bg-elevated/60 text-left text-xs uppercase tracking-wide text-muted">
+            <tr className="border-b border-os-border bg-os-card/60 text-left text-xs uppercase tracking-wide text-os-muted">
               <th className="px-4 py-3 font-semibold">Lead</th>
               <th className="px-4 py-3 font-semibold">Origem</th>
               <th className="px-4 py-3 font-semibold">Serviço</th>
@@ -123,10 +123,10 @@ export default function AdminLeadsPage() {
               const hasDetail = Boolean(lead.quizAnswers?.length || lead.utmCampaign);
               return (
                 <Fragment key={lead.id}>
-                  <tr className="border-b border-line/60 bg-elevated/20 hover:bg-elevated/40">
+                  <tr className="border-b border-os-border/60 bg-os-card/20 hover:bg-os-bg/40">
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-ink">{lead.name}</p>
-                      <p className="flex items-center gap-1.5 text-xs text-muted">
+                      <p className="font-semibold text-os-ink">{lead.name}</p>
+                      <p className="flex items-center gap-1.5 text-xs text-os-muted">
                         <Phone className="h-3 w-3" /> {lead.phone}
                         {lead.email && (
                           <>
@@ -136,14 +136,14 @@ export default function AdminLeadsPage() {
                         )}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted">{SOURCE_LABEL[lead.sourceType]}</td>
-                    <td className="px-4 py-3 text-xs text-ink/80">{lead.service ?? "—"}</td>
-                    <td className="px-4 py-3 text-xs tabular-nums text-muted">{formatDate(lead.createdAt)}</td>
+                    <td className="px-4 py-3 text-xs text-os-muted">{SOURCE_LABEL[lead.sourceType]}</td>
+                    <td className="px-4 py-3 text-xs text-os-ink/80">{lead.service ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs tabular-nums text-os-muted">{formatDate(lead.createdAt)}</td>
                     <td className="px-4 py-3">
                       <select
                         value={lead.status}
                         onChange={(e) => updateStatus(lead.id, e.target.value as LeadStatus)}
-                        className="rounded-lg border border-line bg-bg/60 px-2 py-1 text-xs font-bold text-ink focus:border-brand-primary focus:outline-none"
+                        className="rounded-lg border border-os-border bg-os-bg/60 px-2 py-1 text-xs font-bold text-os-ink focus:border-os-accent focus:outline-none"
                       >
                         {STATUS_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>
@@ -159,7 +159,7 @@ export default function AdminLeadsPage() {
                       {hasDetail && (
                         <button
                           onClick={() => setExpanded(isOpen ? null : lead.id)}
-                          className="text-muted hover:text-ink"
+                          className="text-os-muted hover:text-os-ink"
                         >
                           {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </button>
@@ -167,17 +167,17 @@ export default function AdminLeadsPage() {
                     </td>
                   </tr>
                   {isOpen && hasDetail && (
-                    <tr className="border-b border-line/60 bg-bg/40">
+                    <tr className="border-b border-os-border/60 bg-os-bg/40">
                       <td colSpan={6} className="px-4 py-4">
                         {lead.utmCampaign && (
-                          <p className="mb-2 text-xs text-muted">
-                            UTM: <span className="text-ink/80">{lead.utmSource}</span> /{" "}
-                            <span className="text-ink/80">{lead.utmMedium}</span> /{" "}
-                            <span className="text-ink/80">{lead.utmCampaign}</span>
+                          <p className="mb-2 text-xs text-os-muted">
+                            UTM: <span className="text-os-ink/80">{lead.utmSource}</span> /{" "}
+                            <span className="text-os-ink/80">{lead.utmMedium}</span> /{" "}
+                            <span className="text-os-ink/80">{lead.utmCampaign}</span>
                           </p>
                         )}
                         {lead.quizAnswers && (
-                          <ol className="list-decimal space-y-1 pl-4 text-xs text-ink/80">
+                          <ol className="list-decimal space-y-1 pl-4 text-xs text-os-ink/80">
                             {lead.quizAnswers.map((a, i) => (
                               <li key={i}>{a}</li>
                             ))}

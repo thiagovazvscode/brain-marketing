@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 const inputClass =
-  "w-full rounded-lg border border-line bg-bg/60 px-3 py-2 text-sm text-ink focus:border-brand-primary focus:outline-none";
-const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-muted";
+  "w-full rounded-lg border border-os-border bg-os-bg/60 px-3 py-2 text-sm text-os-ink focus:border-os-accent focus:outline-none";
+const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-os-muted";
 
 export interface DiagnosticRow {
   id: string;
@@ -52,27 +52,27 @@ export function ClientDiagnosticPanel({ clientSlug, diagnostics }: { clientSlug:
   return (
     <div className="space-y-4">
       {latest && (
-        <div className="rounded-xl border border-line bg-elevated/40 p-4">
-          <p className="text-xs text-muted">
+        <div className="rounded-xl border border-os-border bg-os-card/40 p-4">
+          <p className="text-xs text-os-muted">
             Último diagnóstico em {new Date(latest.createdAt).toLocaleDateString("pt-BR")} — gargalo: {" "}
-            <span className="font-semibold text-ink">{PILLAR_LABEL[latest.bottleneck ?? ""] ?? latest.bottleneck}</span>
+            <span className="font-semibold text-os-ink">{PILLAR_LABEL[latest.bottleneck ?? ""] ?? latest.bottleneck}</span>
           </p>
           {latest.scores && (
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {Object.entries(latest.scores).map(([pillar, value]) => (
                 <div key={pillar}>
-                  <p className="text-[11px] uppercase tracking-wide text-muted">{PILLAR_LABEL[pillar]}</p>
-                  <p className="text-lg font-bold text-ink">{value}/10</p>
+                  <p className="text-[11px] uppercase tracking-wide text-os-muted">{PILLAR_LABEL[pillar]}</p>
+                  <p className="text-lg font-bold text-os-ink">{value}/10</p>
                 </div>
               ))}
             </div>
           )}
           {latest.recommendations && latest.recommendations.length > 0 && (
-            <div className="mt-3 space-y-1.5 border-t border-line pt-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-magenta">Recomendação de upsell</p>
+            <div className="mt-3 space-y-1.5 border-t border-os-border pt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-os-accent">Recomendação de upsell</p>
               {latest.recommendations.map((r) => (
-                <p key={r.productSlug} className="text-xs text-ink/80">
-                  <span className="font-semibold text-ink">{r.productSlug}</span> — {r.reason}
+                <p key={r.productSlug} className="text-xs text-os-ink/80">
+                  <span className="font-semibold text-os-ink">{r.productSlug}</span> — {r.reason}
                 </p>
               ))}
             </div>
@@ -81,11 +81,11 @@ export function ClientDiagnosticPanel({ clientSlug, diagnostics }: { clientSlug:
       )}
 
       {!showForm ? (
-        <button onClick={() => setShowForm(true)} className="text-xs font-semibold text-brand-primary hover:underline">
+        <button onClick={() => setShowForm(true)} className="text-xs font-semibold text-os-accent hover:underline">
           Novo diagnóstico
         </button>
       ) : (
-        <form onSubmit={handleSubmit} className="rounded-xl border border-line bg-elevated/40 p-4">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-os-border bg-os-card/40 p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(Object.keys(scores) as (keyof typeof scores)[]).map((pillar) => (
               <div key={pillar}>
@@ -111,7 +111,7 @@ export function ClientDiagnosticPanel({ clientSlug, diagnostics }: { clientSlug:
               Calcular diagnóstico
             </button>
             {diagnostics.length > 0 && (
-              <button type="button" onClick={() => setShowForm(false)} className="text-xs font-semibold text-muted hover:text-ink">
+              <button type="button" onClick={() => setShowForm(false)} className="text-xs font-semibold text-os-muted hover:text-os-ink">
                 Cancelar
               </button>
             )}

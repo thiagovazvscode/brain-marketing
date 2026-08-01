@@ -17,7 +17,7 @@ export function DashboardTabs({ operacao, links, leads }: { operacao: ReactNode;
 
   return (
     <div>
-      <div className="mb-6 flex gap-1 rounded-xl border border-line bg-elevated/50 p-1">
+      <div className="mb-6 flex gap-1 rounded-xl border border-os-border bg-os-card/50 p-1">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -25,7 +25,7 @@ export function DashboardTabs({ operacao, links, leads }: { operacao: ReactNode;
               key={tab.id}
               onClick={() => setActive(tab.id)}
               className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                active === tab.id ? "bg-brand-primary text-white" : "text-muted hover:text-ink"
+                active === tab.id ? "bg-os-accent text-white" : "text-os-muted hover:text-os-ink"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />

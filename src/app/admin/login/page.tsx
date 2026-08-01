@@ -38,21 +38,21 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg px-4 text-ink">
+    <main className="flex min-h-screen items-center justify-center bg-os-bg px-4 text-os-ink">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <Image src="/images/logo.png" alt="Brain Marketing" width={56} height={56} className="rounded-2xl" />
           <div>
             <h1 className="text-lg font-black">Painel Admin</h1>
-            <p className="text-xs text-muted">Brain Marketing & Performance</p>
+            <p className="text-xs text-os-muted">Brain Marketing & Performance</p>
           </div>
         </div>
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-line bg-elevated/50 p-6"
+          className="rounded-2xl border border-os-border bg-os-card/50 p-6"
         >
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-os-muted">
             E-mail
           </label>
           <input
@@ -61,10 +61,10 @@ export default function AdminLoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             required
-            className="mb-4 w-full rounded-lg border border-line bg-bg/60 px-4 py-2.5 text-sm text-ink placeholder:text-muted/60 focus:border-brand-primary focus:outline-none"
+            className="mb-4 w-full rounded-lg border border-os-border bg-os-bg/60 px-4 py-2.5 text-sm text-os-ink placeholder:text-os-muted/60 focus:border-os-accent focus:outline-none"
           />
 
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-os-muted">
             Senha
           </label>
           <input
@@ -73,7 +73,7 @@ export default function AdminLoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             required
-            className="mb-2 w-full rounded-lg border border-line bg-bg/60 px-4 py-2.5 text-sm text-ink placeholder:text-muted/60 focus:border-brand-primary focus:outline-none"
+            className="mb-2 w-full rounded-lg border border-os-border bg-os-bg/60 px-4 py-2.5 text-sm text-os-ink placeholder:text-os-muted/60 focus:border-os-accent focus:outline-none"
           />
 
           {error && <p className="mb-3 text-xs text-red-400">{error}</p>}
