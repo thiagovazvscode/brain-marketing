@@ -57,6 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const billingType = body.billingType ?? "recorrente";
+  const billingCycle = body.billingCycle ?? "mensal";
 
   try {
     const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.slug, slug)).limit(1);
@@ -71,8 +72,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         negotiatedValue: body.negotiatedValue || null,
         discount: body.discount || null,
         billingType,
-        billingCycle: body.billingCycle ?? "mensal",
-        impactOnMrr: String(computeImpactOnMrr(billingType, body.negotiatedValue ?? null, body.discount ?? null)),
+        billingCycle,
+        impactOnMrr: String(computeImpactOnMrr(billingType, body.negotiatedValue ?? null, body.discount ?? null, billingCycle)),
       })
       .returning();
 

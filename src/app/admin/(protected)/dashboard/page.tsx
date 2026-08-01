@@ -21,7 +21,7 @@ async function getOperacaoData() {
       db.execute<{ mrr: string; contratada: string }>(sql`
         SELECT
           COALESCE(SUM(impact_on_mrr) FILTER (WHERE status = 'ativo'), 0) as mrr,
-          COALESCE(SUM(negotiated_value), 0) as contratada
+          COALESCE(SUM(negotiated_value) FILTER (WHERE status <> 'encerrado'), 0) as contratada
         FROM client_products
       `),
       db

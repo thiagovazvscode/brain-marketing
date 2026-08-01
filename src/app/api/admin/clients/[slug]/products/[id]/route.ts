@@ -51,16 +51,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updates.notes = body.notes?.trim() || null;
     }
 
-    if (body.negotiatedValue !== undefined || body.billingType !== undefined || body.discount !== undefined) {
+    // O ciclo entra no cálculo do MRR (anual/trimestral normalizam pra mês), então
+    // mudar SÓ o ciclo também precisa recalcular — senão o MRR fica defasado.
+    if (
+      body.negotiatedValue !== undefined ||
+      body.billingType !== undefined ||
+      body.discount !== undefined ||
+      body.billingCycle !== undefined
+    ) {
       const billingType = body.billingType ?? existing.billingType;
       const negotiatedValue = body.negotiatedValue ?? existing.negotiatedValue;
       const discount = body.discount ?? existing.discount;
+      const billingCycle = body.billingCycle ?? existing.billingCycle;
       if (body.negotiatedValue !== undefined) updates.negotiatedValue = body.negotiatedValue || null;
       if (body.discount !== undefined) updates.discount = body.discount || null;
       if (body.billingType !== undefined) updates.billingType = body.billingType;
-      updates.impactOnMrr = String(computeImpactOnMrr(billingType, negotiatedValue, discount));
+      if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
+      updates.impactOnMrr = String(computeImpactOnMrr(billingType, negotiatedValue, discount, billingCycle));
     }
-    if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
     if (body.responsibleUserId !== undefined) updates.responsibleUserId = body.responsibleUserId || null;
     if (body.onboardingStatus !== undefined) {
       if (!isValidOnboardingStatus(body.onboardingStatus)) {

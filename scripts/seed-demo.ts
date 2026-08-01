@@ -323,7 +323,9 @@ async function seedEngagements(clientIds: Map<string, string>, productIds: Map<s
       const isEnded = eng.status === "encerrado";
       const isPaused = eng.status === "pausado";
       const negotiatedValue = String(pricing.value);
-      const impactOnMrr = String(computeImpactOnMrr(pricing.billingType, isEnded ? null : negotiatedValue));
+      const impactOnMrr = String(
+        computeImpactOnMrr(pricing.billingType, isEnded ? null : negotiatedValue, null, pricing.billingCycle)
+      );
 
       let onboardingStatus: string;
       let implementationProgress: number;
