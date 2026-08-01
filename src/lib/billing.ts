@@ -42,12 +42,19 @@ export function isValidOperationalStatus(id: string): id is OperationalStatusId 
   return OPERATIONAL_STATUSES.some((s) => s.id === id);
 }
 
-// MRR real de uma contratação: recorrente soma o valor negociado, pontual
-// soma zero (impacta receita pontual, não recorrente). Guardado como coluna
-// (impactOnMrr) em vez de calculado só em query, pra somas agregadas no
-// dashboard não precisarem repetir esse CASE em todo lugar.
-export function computeImpactOnMrr(billingType: "recorrente" | "pontual", negotiatedValue: number | string | null): number {
+// MRR real de uma contratação: recorrente soma o valor negociado (menos
+// desconto), pontual soma zero (impacta receita pontual, não recorrente).
+// Guardado como coluna (impactOnMrr) em vez de calculado só em query, pra
+// somas agregadas no dashboard não precisarem repetir esse CASE em todo lugar.
+export function computeImpactOnMrr(
+  billingType: "recorrente" | "pontual",
+  negotiatedValue: number | string | null,
+  discount: number | string | null = null
+): number {
   if (billingType !== "recorrente") return 0;
   const value = typeof negotiatedValue === "string" ? parseFloat(negotiatedValue) : negotiatedValue;
-  return value && !Number.isNaN(value) ? value : 0;
+  if (!value || Number.isNaN(value)) return 0;
+  const discountValue = typeof discount === "string" ? parseFloat(discount) : discount;
+  const effectiveDiscount = discountValue && !Number.isNaN(discountValue) ? discountValue : 0;
+  return Math.max(0, value - effectiveDiscount);
 }

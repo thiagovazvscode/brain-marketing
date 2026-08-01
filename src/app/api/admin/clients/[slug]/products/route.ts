@@ -42,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     productId?: string;
     notes?: string;
     negotiatedValue?: string;
+    discount?: string;
     billingType?: "recorrente" | "pontual";
     billingCycle?: "mensal" | "trimestral" | "semestral" | "anual" | "unico";
   };
@@ -68,9 +69,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         productId: body.productId,
         notes: body.notes?.trim() || null,
         negotiatedValue: body.negotiatedValue || null,
+        discount: body.discount || null,
         billingType,
         billingCycle: body.billingCycle ?? "mensal",
-        impactOnMrr: String(computeImpactOnMrr(billingType, body.negotiatedValue ?? null)),
+        impactOnMrr: String(computeImpactOnMrr(billingType, body.negotiatedValue ?? null, body.discount ?? null)),
       })
       .returning();
 

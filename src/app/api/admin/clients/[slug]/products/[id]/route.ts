@@ -15,6 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     currentStage?: string;
     notes?: string;
     negotiatedValue?: string;
+    discount?: string;
     billingType?: "recorrente" | "pontual";
     billingCycle?: "mensal" | "trimestral" | "semestral" | "anual" | "unico";
     responsibleUserId?: string;
@@ -50,12 +51,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updates.notes = body.notes?.trim() || null;
     }
 
-    if (body.negotiatedValue !== undefined || body.billingType !== undefined) {
+    if (body.negotiatedValue !== undefined || body.billingType !== undefined || body.discount !== undefined) {
       const billingType = body.billingType ?? existing.billingType;
       const negotiatedValue = body.negotiatedValue ?? existing.negotiatedValue;
+      const discount = body.discount ?? existing.discount;
       if (body.negotiatedValue !== undefined) updates.negotiatedValue = body.negotiatedValue || null;
+      if (body.discount !== undefined) updates.discount = body.discount || null;
       if (body.billingType !== undefined) updates.billingType = body.billingType;
-      updates.impactOnMrr = String(computeImpactOnMrr(billingType, negotiatedValue));
+      updates.impactOnMrr = String(computeImpactOnMrr(billingType, negotiatedValue, discount));
     }
     if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
     if (body.responsibleUserId !== undefined) updates.responsibleUserId = body.responsibleUserId || null;
