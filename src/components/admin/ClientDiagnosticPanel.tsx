@@ -105,7 +105,7 @@ export function ClientDiagnosticPanel({ clientSlug, diagnostics }: { clientSlug:
             <button
               type="submit"
               disabled={submitting}
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg bg-os-accent px-4 py-2 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-60"
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Calcular diagnóstico

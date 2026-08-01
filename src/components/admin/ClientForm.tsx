@@ -116,7 +116,7 @@ export function ClientForm({ mode, initialValues, onSubmit, onCancel }: ClientFo
         <button
           type="submit"
           disabled={submitting}
-          className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-60"
+          className="flex items-center justify-center gap-2 rounded-lg bg-os-accent px-4 py-2 text-sm font-bold text-white transition hover:brightness-110 disabled:opacity-60"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {mode === "create" ? "Criar cliente" : "Salvar alterações"}

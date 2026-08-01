@@ -151,7 +151,7 @@ export function ClientProductsPanel({
             <button
               type="submit"
               disabled={!addingProductId || submitting}
-              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-lg bg-os-accent px-3 py-1.5 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-60"
             >
               {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Associar
