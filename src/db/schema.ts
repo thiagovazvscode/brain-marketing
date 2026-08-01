@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const leadStatusEnum = pgEnum("lead_status", ["novo", "contatado", "fechado", "perdido"]);
 export const leadSourceEnum = pgEnum("lead_source", ["banner", "quiz-cta", "homepage-contact"]);
@@ -218,6 +219,11 @@ export const clientProducts = pgTable("client_products", {
   // em trigger de banco.
   impactOnMrr: numeric("impact_on_mrr", { precision: 12, scale: 2 }).notNull().default("0"),
 
+  // Venda que originou esta contratação (CRM, Fase 2). Nullable: contratações
+  // lançadas direto na pasta do cliente, sem passar pelo funil, continuam
+  // válidas — e as que já existem não são invalidadas.
+  saleId: uuid("sale_id").references((): AnyPgColumn => sales.id),
+
   // Responsáveis
   responsibleUserId: uuid("responsible_user_id").references(() => adminUsers.id),
   salespersonId: uuid("salesperson_id").references(() => adminUsers.id),
@@ -284,5 +290,177 @@ export const clientDiagnostics = pgTable("client_diagnostics", {
   }>(),
   bottleneck: text("bottleneck"),
   recommendations: jsonb("recommendations").$type<{ productSlug: string; reason: string }[]>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ── CRM Comercial (specs/crm-comercial) ─────────────────────────────────
+
+// Conjuntos pequenos e estáveis — não mudam por decisão de negócio do dia a
+// dia, por isso pgEnum. Origem, tipo de atividade e motivo de perda ficam como
+// text validado em src/lib/crm.ts pelo motivo oposto (listas que crescem).
+export const opportunityStatusEnum = pgEnum("opportunity_status", ["aberta", "ganha", "perdida"]);
+export const opportunityPriorityEnum = pgEnum("opportunity_priority", [
+  "baixa",
+  "media",
+  "alta",
+  "urgente",
+]);
+
+// Funil. Existe como tabela (e não como constante) porque a Fase 2 já pede
+// etapas configuráveis, e múltiplos funis (Novos negócios / Upsell) entram
+// depois sem migration.
+export const pipelines = pgTable("pipelines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Etapas no banco, nunca hardcoded (requisito explícito da Fase 2).
+// isWon/isLost são flags de comportamento, não nomes: renomear "Fechado" para
+// "Ganho" não pode quebrar o fluxo de contratação.
+// stuckAfterDays é por etapa — negociação tolera mais tempo parada que
+// "novo lead", então um limite global mentiria.
+export const pipelineStages = pgTable("pipeline_stages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pipelineId: uuid("pipeline_id").notNull().references(() => pipelines.id),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  color: text("color"),
+  isWon: boolean("is_won").notNull().default(false),
+  isLost: boolean("is_lost").notNull().default(false),
+  defaultProbability: integer("default_probability").notNull().default(0),
+  stuckAfterDays: integer("stuck_after_days").notNull().default(14),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Oportunidade: entidade central do CRM.
+//
+// leadId é nullable de propósito — lead é captura bruta (pode ser curioso,
+// duplicado, spam) e oportunidade é pipeline qualificado. Manter as duas
+// separadas preserva os leads já existentes e permite oportunidade criada
+// manualmente, sem origem no site.
+//
+// clientId também é nullable: preenchido em upsell (cliente que já existe) ou
+// no momento da conversão.
+//
+// "Dias na etapa" e "alerta de parada" NÃO são colunas — derivam de
+// stageEnteredAt em tempo de leitura. Contador materializado ficaria errado
+// todo dia à meia-noite, mesmo defeito que o impactOnMrr defasado da Fase 1.
+export const opportunities = pgTable("opportunities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pipelineId: uuid("pipeline_id").notNull().references(() => pipelines.id),
+  stageId: uuid("stage_id").notNull().references(() => pipelineStages.id),
+  leadId: uuid("lead_id").references(() => leads.id),
+  clientId: uuid("client_id").references(() => clients.id),
+
+  title: text("title").notNull(),
+  contactName: text("contact_name"),
+  companyName: text("company_name"),
+  phone: text("phone"),
+  whatsapp: text("whatsapp"),
+  email: text("email"),
+  source: text("source"),
+
+  estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),
+  probability: integer("probability").notNull().default(0),
+  priority: opportunityPriorityEnum("priority").notNull().default("media"),
+  ownerId: uuid("owner_id").references(() => adminUsers.id),
+  status: opportunityStatusEnum("status").notNull().default("aberta"),
+
+  stageEnteredAt: timestamp("stage_entered_at").defaultNow().notNull(),
+  nextAction: text("next_action"),
+  nextActionDate: date("next_action_date"),
+  expectedCloseDate: date("expected_close_date"),
+  notes: text("notes"),
+
+  lostReason: text("lost_reason"),
+  lostNotes: text("lost_notes"),
+  lostAt: timestamp("lost_at"),
+  wonAt: timestamp("won_at"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Produtos de interesse — o que o prospect quer comprar, antes de virar
+// contratação. planId opcional: nem toda negociação começa com plano definido.
+export const opportunityProducts = pgTable("opportunity_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  opportunityId: uuid("opportunity_id").notNull().references(() => opportunities.id),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  planId: uuid("plan_id").references(() => productPlans.id),
+  estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Uma tabela cobre atividade, reunião, tarefa e anotação — a diferença é
+// semântica (type) e temporal (dueAt/doneAt), não estrutural. Quatro tabelas
+// quase idênticas só dificultariam montar a timeline unificada do detalhe.
+//   dueAt nulo  + doneAt nulo  → anotação
+//   dueAt preenchido           → tarefa/compromisso agendado
+//   doneAt preenchido          → concluído
+export const opportunityActivities = pgTable("opportunity_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  opportunityId: uuid("opportunity_id").notNull().references(() => opportunities.id),
+  type: text("type").notNull().default("nota"),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueAt: timestamp("due_at"),
+  doneAt: timestamp("done_at"),
+  createdBy: uuid("created_by").references(() => adminUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Auditoria de movimentação no funil — mesma lógica de clientStageHistory:
+// sem isso não dá pra medir tempo de ciclo por etapa nem taxa de conversão.
+export const opportunityStageHistory = pgTable("opportunity_stage_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  opportunityId: uuid("opportunity_id").notNull().references(() => opportunities.id),
+  fromStageId: uuid("from_stage_id").references(() => pipelineStages.id),
+  toStageId: uuid("to_stage_id").notNull().references(() => pipelineStages.id),
+  changedBy: uuid("changed_by").references(() => adminUsers.id),
+  note: text("note"),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+});
+
+// Documento por referência (link), não upload — mesma decisão tomada para
+// arquivos de cliente: storage real custa e só se justifica com uso comprovado.
+export const opportunityDocuments = pgTable("opportunity_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  opportunityId: uuid("opportunity_id").notNull().references(() => opportunities.id),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  category: text("category").notNull().default("outro"),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+});
+
+// A venda: agregador do que foi fechado numa conversão.
+//
+// Sem ela, converter uma oportunidade em 3 produtos criaria 3 client_products
+// soltos e "a venda" não existiria como objeto — impossível dizer quanto essa
+// negociação fechou, ou pendurar contrato/fatura depois.
+//
+// É também o ponto de ancoragem das Fases 3/4: contractId, signatureStatus e
+// invoiceId entram aqui como colunas aditivas, sem refatorar o CRM.
+export const sales = pgTable("sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  opportunityId: uuid("opportunity_id").references(() => opportunities.id),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  soldAt: date("sold_at").notNull().defaultNow(),
+  salespersonId: uuid("salesperson_id").references(() => adminUsers.id),
+  totalMrr: numeric("total_mrr", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalOneTime: numeric("total_one_time", { precision: 12, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
