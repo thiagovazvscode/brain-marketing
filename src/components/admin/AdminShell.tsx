@@ -40,7 +40,7 @@ interface NavItem {
 // aquela entidade.
 const MAIN_NAV: NavItem[] = [
   { href: "/admin/dashboard", label: "Visão Geral", icon: LayoutDashboard },
-  { href: "/admin/crm", label: "CRM Comercial", icon: Target, comingSoon: true },
+  { href: "/admin/crm", label: "CRM Comercial", icon: Target },
   { href: "/admin/clients", label: "Clientes", icon: Building2 },
   { href: "/admin/products", label: "Produtos e Planos", icon: Package },
   { href: "/admin/playbooks", label: "Métodos e Playbooks", icon: Workflow, comingSoon: true },
