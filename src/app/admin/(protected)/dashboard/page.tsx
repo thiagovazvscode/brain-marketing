@@ -1,5 +1,5 @@
 import { sql, eq, desc } from "drizzle-orm";
-import { Eye, MousePointerClick, Users, Percent, Building2, Layers, AlertTriangle, Link2 } from "lucide-react";
+import { Eye, MousePointerClick, Users, Percent, Building2, Layers, AlertTriangle, Link2, Wallet, TrendingUp } from "lucide-react";
 import { db } from "@/db";
 import { clientProducts, products, trackedLinks, linkClicks, pageViews, quizSessions } from "@/db/schema";
 import { METHOD_STAGES } from "@/lib/method-stages";
@@ -14,10 +14,16 @@ import { StageFunnelChart } from "@/components/admin/charts/StageFunnelChart";
 export const dynamic = "force-dynamic";
 
 async function getOperacaoData() {
-  const [clientesAtivosResult, entregasAtivasResult, stageRows, produtoRows, travadasResult, oportunidadeRows, novosPorMesResult] =
+  const [clientesAtivosResult, entregasAtivasResult, receitaResult, stageRows, produtoRows, travadasResult, oportunidadeRows, novosPorMesResult] =
     await Promise.all([
       db.execute<{ count: number }>(sql`SELECT count(DISTINCT client_id)::int as count FROM client_products WHERE status = 'ativo'`),
       db.execute<{ count: number }>(sql`SELECT count(*)::int as count FROM client_products WHERE status = 'ativo'`),
+      db.execute<{ mrr: string; contratada: string }>(sql`
+        SELECT
+          COALESCE(SUM(impact_on_mrr) FILTER (WHERE status = 'ativo'), 0) as mrr,
+          COALESCE(SUM(negotiated_value), 0) as contratada
+        FROM client_products
+      `),
       db
         .select({ stage: clientProducts.currentStage, count: sql<number>`count(*)::int` })
         .from(clientProducts)
@@ -75,6 +81,8 @@ async function getOperacaoData() {
     clientesAtivos: clientesAtivosResult.rows[0]?.count ?? 0,
     entregasAtivas: entregasAtivasResult.rows[0]?.count ?? 0,
     entregasTravadas: travadasResult.rows[0]?.count ?? 0,
+    mrr: Number(receitaResult.rows[0]?.mrr ?? 0),
+    receitaContratada: Number(receitaResult.rows[0]?.contratada ?? 0),
     funil,
     produtoRows,
     oportunidades,
@@ -198,11 +206,17 @@ async function getLeadsData() {
 export default async function AdminDashboardPage() {
   const [operacao, linksData, leadsData] = await Promise.all([getOperacaoData(), getLinksData(), getLeadsData()]);
 
+  const formatCurrency = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
   const operacaoSection = (
     <div>
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile icon={Wallet} label="Receita recorrente (MRR)" value={formatCurrency(operacao.mrr)} />
+        <StatTile icon={TrendingUp} label="Receita contratada (total)" value={formatCurrency(operacao.receitaContratada)} />
         <StatTile icon={Building2} label="Clientes ativos" value={String(operacao.clientesAtivos)} />
         <StatTile icon={Layers} label="Entregas ativas" value={String(operacao.entregasAtivas)} />
+      </div>
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile icon={AlertTriangle} label="Entregas travadas (>21d)" value={String(operacao.entregasTravadas)} />
         <StatTile icon={Users} label="Oportunidades de upsell" value={String(operacao.oportunidades.length)} />
       </div>
