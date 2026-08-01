@@ -1,13 +1,27 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric } from "drizzle-orm/pg-core";
 
 export const leadStatusEnum = pgEnum("lead_status", ["novo", "contatado", "fechado", "perdido"]);
 export const leadSourceEnum = pgEnum("lead_source", ["banner", "quiz-cta", "homepage-contact"]);
 export const pixelProviderEnum = pgEnum("pixel_provider", ["meta", "ga4"]);
 
+// Papel do usuário dentro do Brain OS — conjunto pequeno e estável o
+// suficiente pra justificar enum (ao contrário de onboarding/operational
+// status, que mudam com mais frequência e ficam como texto validado em app).
+export const userRoleEnum = pgEnum("user_role", [
+  "administrador",
+  "comercial",
+  "gestor",
+  "atendimento",
+  "financeiro",
+  "colaborador",
+]);
+
 export const adminUsers = pgTable("admin_users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  name: text("name"),
+  role: userRoleEnum("role").notNull().default("administrador"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -140,19 +154,83 @@ export const products = pgTable("products", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Modelo de cobrança — conjunto pequeno e estável (não muda por decisão de
+// negócio do dia a dia como um produto novo mudaria), por isso enum.
+export const billingTypeEnum = pgEnum("billing_type", ["recorrente", "pontual"]);
+export const billingCycleEnum = pgEnum("billing_cycle", [
+  "mensal",
+  "trimestral",
+  "semestral",
+  "anual",
+  "unico",
+]);
+
+// Plano de um produto (ex.: "Tráfego Pago — Corretores" vs "— Incorporadoras"),
+// com preço-base e cobrança padrão. clientProducts pode referenciar um plano
+// ou usar valores 100% negociados (planId nullable).
+export const productPlans = pgTable("product_plans", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  billingType: billingTypeEnum("billing_type").notNull().default("recorrente"),
+  billingCycle: billingCycleEnum("billing_cycle").notNull().default("mensal"),
+  basePrice: numeric("base_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Engajamento = "contrato vivo": qual produto, em que estágio do Método Brain,
 // com que status. currentStage é text validado contra src/lib/method-stages.ts
 // (não pgEnum): é metodologia estável da marca, mas mantemos o mesmo cuidado
-// de não travar em enum de banco.
+// de não travar em enum de banco. onboardingStatus/operationalStatus seguem o
+// mesmo raciocínio — ver src/lib/billing.ts.
+//
+// contractId/playbookInstanceId/projectId ficam de fora por enquanto: não faz
+// sentido criar FK pra tabela que ainda não existe. Entram nas migrations das
+// Fases 3/4 quando Contratos e Playbooks forem construídos.
 export const clientProducts = pgTable("client_products", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id").notNull().references(() => clients.id),
   productId: uuid("product_id").notNull().references(() => products.id),
+  planId: uuid("plan_id").references(() => productPlans.id),
   status: clientEngagementStatusEnum("status").notNull().default("ativo"),
   currentStage: text("current_stage").notNull().default("raio-x"),
   startedAt: date("started_at").notNull().defaultNow(),
   endedAt: date("ended_at"),
   notes: text("notes"),
+
+  // Comercial/financeiro
+  negotiatedValue: numeric("negotiated_value", { precision: 12, scale: 2 }),
+  billingType: billingTypeEnum("billing_type").notNull().default("recorrente"),
+  billingCycle: billingCycleEnum("billing_cycle").notNull().default("mensal"),
+  billingDay: integer("billing_day"),
+  installments: integer("installments"),
+  quantity: integer("quantity").notNull().default(1),
+  numberOfUsers: integer("number_of_users"),
+  discount: numeric("discount", { precision: 12, scale: 2 }),
+  contractTerm: integer("contract_term"),
+  // MRR real da contratação — recorrente soma negotiatedValue, pontual soma 0.
+  // Calculado em app (src/lib/billing.ts) no create/update, não em query nem
+  // em trigger de banco.
+  impactOnMrr: numeric("impact_on_mrr", { precision: 12, scale: 2 }).notNull().default("0"),
+
+  // Responsáveis
+  responsibleUserId: uuid("responsible_user_id").references(() => adminUsers.id),
+  salespersonId: uuid("salesperson_id").references(() => adminUsers.id),
+
+  // Operação — texto validado em app (src/lib/billing.ts), mesmo padrão de
+  // method-stages.ts: lista de status muda mais rápido do que justificaria
+  // uma migration.
+  onboardingStatus: text("onboarding_status").notNull().default("nao-iniciado"),
+  implementationProgress: integer("implementation_progress").notNull().default(0),
+  operationalStatus: text("operational_status").notNull().default("aguardando-inicio"),
+  nextAction: text("next_action"),
+  nextActionDate: date("next_action_date"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

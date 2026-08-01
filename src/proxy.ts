@@ -24,7 +24,7 @@ export async function proxy(request: NextRequest) {
 
   // Renova a sessão a cada request válido (rolling 7 dias).
   const response = NextResponse.next();
-  const renewedToken = await createSessionToken({ email: session.email });
+  const renewedToken = await createSessionToken({ userId: session.userId, email: session.email, role: session.role });
   response.cookies.set(SESSION_COOKIE, renewedToken, {
     httpOnly: true,
     secure: true,

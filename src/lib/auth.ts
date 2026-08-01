@@ -13,11 +13,13 @@ function getSecretKey() {
 }
 
 export interface SessionPayload {
+  userId: string;
   email: string;
+  role: string;
 }
 
 export async function createSessionToken(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ email: payload.email })
+  return new SignJWT({ userId: payload.userId, email: payload.email, role: payload.role })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION_SECONDS}s`)
@@ -27,8 +29,8 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
-    if (typeof payload.email !== "string") return null;
-    return { email: payload.email };
+    if (typeof payload.email !== "string" || typeof payload.userId !== "string") return null;
+    return { userId: payload.userId, email: payload.email, role: typeof payload.role === "string" ? payload.role : "administrador" };
   } catch {
     return null;
   }

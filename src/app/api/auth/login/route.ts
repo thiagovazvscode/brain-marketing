@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) return genericError;
 
-    const token = await createSessionToken({ email: user.email });
+    const token = await createSessionToken({ userId: user.id, email: user.email, role: user.role });
     const response = NextResponse.json({ ok: true });
     response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
