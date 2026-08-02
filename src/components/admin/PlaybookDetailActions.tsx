@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wand2 } from "lucide-react";
 
 export function PlaybookDetailActions({ playbookId, status }: { playbookId: string; status: string }) {
   const router = useRouter();
@@ -30,6 +30,12 @@ export function PlaybookDetailActions({ playbookId, status }: { playbookId: stri
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Link
+        href={`/admin/playbooks/${playbookId}/editor`}
+        className="flex items-center gap-1.5 rounded-lg bg-os-accent px-3.5 py-2 text-xs font-bold text-white hover:brightness-110"
+      >
+        <Wand2 className="h-3.5 w-3.5" /> Editar Estrutura
+      </Link>
       <Link
         href={`/admin/playbooks/${playbookId}/editar`}
         className="rounded-lg border border-os-border px-3.5 py-2 text-xs font-bold text-os-ink hover:border-os-accent"

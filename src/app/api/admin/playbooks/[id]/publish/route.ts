@@ -20,13 +20,33 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .where(eq(playbooks.id, id))
       .returning();
 
-    await db.insert(playbookVersions).values({
-      playbookId: id,
-      versionLabel: playbook.version,
-      status: "publicado",
-      snapshot: playbook,
-      authorId: playbook.authorId,
-    });
+    // Se o construtor já abriu esta versão como rascunho (currentVersionId
+    // aponta pra uma linha "rascunho" desta versão), publica ATUALIZANDO
+    // essa mesma linha — as etapas/blocos já pendurados nela continuam
+    // válidos. Só insere linha nova no caminho legado (metadados editados
+    // sem nunca abrir o construtor, sem currentVersionId ainda).
+    const [draftVersion] = existing.currentVersionId
+      ? await db
+          .select()
+          .from(playbookVersions)
+          .where(eq(playbookVersions.id, existing.currentVersionId))
+          .limit(1)
+      : [];
+
+    if (draftVersion && draftVersion.status === "rascunho" && draftVersion.versionLabel === playbook.version) {
+      await db
+        .update(playbookVersions)
+        .set({ status: "publicado", snapshot: playbook })
+        .where(eq(playbookVersions.id, draftVersion.id));
+    } else {
+      await db.insert(playbookVersions).values({
+        playbookId: id,
+        versionLabel: playbook.version,
+        status: "publicado",
+        snapshot: playbook,
+        authorId: playbook.authorId,
+      });
+    }
 
     return NextResponse.json({ playbook });
   } catch {

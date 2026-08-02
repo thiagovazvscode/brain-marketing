@@ -43,6 +43,20 @@
       "when": 1785588120687,
       "tag": "0005_cool_korath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785630309861,
+      "tag": "0006_fair_dormammu",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785682131924,
+      "tag": "0007_yellow_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }

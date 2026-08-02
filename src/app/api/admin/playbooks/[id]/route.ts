@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { playbooks } from "@/db/schema";
-import { computeVersionTransition, isValidPlaybookType } from "@/lib/methods";
+import { isValidPlaybookType } from "@/lib/methods";
 import { getPlaybookDetail } from "@/lib/methods-data";
+import { ensureDraftVersion } from "@/lib/playbook-builder";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,13 +47,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   try {
-    const [existing] = await db.select().from(playbooks).where(eq(playbooks.id, id)).limit(1);
-    if (!existing) return NextResponse.json({ error: "Playbook não encontrado." }, { status: 404 });
-
     // Mesma regra do método (src/lib/methods.ts): publicado não é editado
-    // in-place, volta para rascunho com a versão seguinte. O publish() já
-    // registrou o snapshot dessa versão publicada — não duplica aqui.
-    const transition = computeVersionTransition(existing.status, existing.version);
+    // in-place, volta para rascunho com a versão seguinte — e agora essa
+    // transição materializa a linha de playbookVersions que o construtor de
+    // etapas/blocos usa (ensureDraftVersion em src/lib/playbook-builder.ts).
+    // O publish() já registrou o snapshot da versão publicada — não duplica aqui.
+    const result = await ensureDraftVersion(id);
+    if (!result) return NextResponse.json({ error: "Playbook não encontrado." }, { status: 404 });
 
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) patch.name = body.name.trim();
@@ -69,10 +70,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.deliverables !== undefined) patch.deliverables = body.deliverables.filter(Boolean);
     if (body.successCriteria !== undefined) patch.successCriteria = body.successCriteria.filter(Boolean);
     if (body.authorId !== undefined) patch.authorId = body.authorId || null;
-    if (transition) {
-      patch.status = transition.nextStatus;
-      patch.version = transition.nextVersion;
-    }
 
     const [playbook] = await db.update(playbooks).set(patch).where(eq(playbooks.id, id)).returning();
     return NextResponse.json({ playbook });

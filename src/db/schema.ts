@@ -590,6 +590,11 @@ export const playbooks = pgTable("playbooks", {
   version: text("version").notNull().default("1.0"),
   authorId: uuid("author_id").references(() => adminUsers.id),
   publishedAt: timestamp("published_at"),
+  // Versão aberta para edição agora — rascunho corrente, ou a última
+  // publicada se não houver rascunho aberto. Nullable: playbooks publicados
+  // antes desta coluna existir (Etapa 1) só ganham a linha quando alguém
+  // abre o construtor (ensureDraftVersion em src/lib/methods.ts).
+  currentVersionId: uuid("current_version_id").references((): AnyPgColumn => playbookVersions.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -618,6 +623,135 @@ export const resources = pgTable("resources", {
   methodId: uuid("method_id").references(() => methods.id),
   playbookId: uuid("playbook_id").references(() => playbooks.id),
   authorId: uuid("author_id").references(() => adminUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ── Métodos & Execução — Fase 2.1: construtor visual de playbooks ──────────
+//
+// playbookVersions até aqui só existia como log gravado no publish/archive —
+// não havia linha endereçável para o rascunho corrente. Etapas e blocos
+// precisam pendurar num playbookVersionId concreto (inclusive em rascunho),
+// então playbooks ganha currentVersionId apontando pra versão aberta agora
+// (rascunho ou, na ausência de rascunho, a última publicada). Ver
+// ensureDraftVersion em src/lib/methods.ts — cria/reaproveita essa linha,
+// nunca sobrescreve uma versão já publicada.
+export const playbookBlockPriorityEnum = pgEnum("playbook_block_priority", [
+  "baixa",
+  "media",
+  "alta",
+  "critica",
+]);
+
+export const durationUnitEnum = pgEnum("duration_unit", [
+  "horas",
+  "dias_corridos",
+  "dias_uteis",
+  "semanas",
+]);
+
+// Os 12 tipos vêm explícitos do pedido — enum pronto com todos agora (mesma
+// decisão já tomada em playbookTypeEnum na Etapa 1), mas esta rodada só
+// implementa internal_task e client_request; os demais ficam desabilitados
+// na barra "Adicionar bloco" até a próxima entrega da Fase 2.
+export const playbookBlockTypeEnum = pgEnum("playbook_block_type", [
+  "internal_task",
+  "client_request",
+  "meeting",
+  "checklist",
+  "form_briefing",
+  "document",
+  "analysis",
+  "deliverable",
+  "approval",
+  "wait",
+  "milestone",
+  "condition",
+]);
+
+// Um playbook é modelo, não execução real — o bloco não pode obrigar um
+// admin_user específico direto na versão publicada (ela é reaplicada pra
+// vários clientes). "papel_padrao"/"usuario_especifico"/"definir_ao_aplicar"
+// é conjunto fixo e pequeno (3 modos), por isso enum — ao contrário do papel
+// em si (default_assignee_role), que é lista que cresce e fica texto
+// validado em app, mesmo raciocínio de overdueAction/dueOffsetAnchor.
+export const playbookBlockAssigneeTypeEnum = pgEnum("playbook_block_assignee_type", [
+  "papel_padrao",
+  "usuario_especifico",
+  "definir_ao_aplicar",
+]);
+
+// Etapas operacionais de UMA versão do playbook — não confundir com
+// methodStages (macroetapas estratégicas do método). Mutáveis livremente
+// dentro da versão em rascunho; a versão publicada nunca é editada
+// (transitionToDraft/ensureDraftVersion cuidam de abrir um novo rascunho).
+export const playbookStageTemplates = pgTable("playbook_stage_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  playbookVersionId: uuid("playbook_version_id").notNull().references(() => playbookVersions.id),
+  name: text("name").notNull(),
+  objective: text("objective"),
+  description: text("description"),
+  internalInstructions: text("internal_instructions"),
+  position: integer("position").notNull().default(0),
+  durationValue: integer("duration_value"),
+  durationUnit: durationUnitEnum("duration_unit"),
+  defaultAssigneeRole: text("default_assignee_role"),
+  isRequired: boolean("is_required").notNull().default(true),
+  blocksNextStage: boolean("blocks_next_stage").notNull().default(false),
+  completionCriteria: text("completion_criteria"),
+  expectedDeliverable: text("expected_deliverable"),
+  priority: playbookBlockPriorityEnum("priority").notNull().default("media"),
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Bloco operacional dentro de uma etapa. playbookVersionId é redundante
+// (dá pra chegar via stageId) de propósito — evita join extra em toda
+// validação de pertencimento e casa com a regra do pedido de nunca alterar
+// um registro só pelo ID isolado (rotas validam version → stage → block).
+// dueOffsetAnchor/overdueAction ficam como texto validado em app (mesmo
+// raciocínio de onboardingStatus): listas que tendem a crescer, ao
+// contrário de priority/type, que são conjuntos fixos do pedido.
+export const playbookBlockTemplates = pgTable("playbook_block_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  playbookVersionId: uuid("playbook_version_id").notNull().references(() => playbookVersions.id),
+  stageId: uuid("stage_id").notNull().references(() => playbookStageTemplates.id),
+  type: playbookBlockTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  internalInstructions: text("internal_instructions"),
+  position: integer("position").notNull().default(0),
+  // Responsável interno tem 3 modalidades (correção funcional pós-homologação
+  // da Fase 2.1): "papel_padrao" usa defaultAssigneeRole (papel genérico,
+  // reaplicável a qualquer cliente); "usuario_especifico" usa
+  // defaultAssigneeId (pessoa real do time, hoje só existe 1 admin_user);
+  // "definir_ao_aplicar" deixa os dois em branco de propósito — o
+  // responsável só é decidido quando o playbook for aplicado a um cliente
+  // (Fase 2.2). Default do BANCO é "definir_ao_aplicar", não "papel_padrao":
+  // um bloco sem papel nem usuário selecionado não pode ficar marcado como
+  // "papel_padrao" (isso seria um estado inconsistente — validate/route.ts
+  // trata "papel_padrao" sem defaultAssigneeRole como erro crítico). O
+  // front-end pode mostrar "Papel padrão" como primeira opção visual do
+  // seletor, mas só grava "papel_padrao" quando um papel de fato for escolhido.
+  assigneeType: playbookBlockAssigneeTypeEnum("assignee_type").notNull().default("definir_ao_aplicar"),
+  defaultAssigneeRole: text("default_assignee_role"),
+  defaultAssigneeId: uuid("default_assignee_id").references(() => adminUsers.id),
+  externalResponsibleRole: text("external_responsible_role"),
+  dueOffsetValue: integer("due_offset_value"),
+  dueOffsetUnit: durationUnitEnum("due_offset_unit"),
+  dueOffsetAnchor: text("due_offset_anchor"),
+  priority: playbookBlockPriorityEnum("priority").notNull().default("media"),
+  isRequired: boolean("is_required").notNull().default(true),
+  blocksStage: boolean("blocks_stage").notNull().default(false),
+  dependencyBlockId: uuid("dependency_block_id").references((): AnyPgColumn => playbookBlockTemplates.id),
+  expectedResult: text("expected_result"),
+  completionCriteria: text("completion_criteria"),
+  overdueAction: text("overdue_action"),
+  // Só usado por client_request: o que o cliente precisa enviar/responder.
+  clientExpectedResponse: text("client_expected_response"),
+  metadata: jsonb("metadata"),
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

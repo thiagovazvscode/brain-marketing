@@ -1,20 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock } from "lucide-react";
+import { Clock, Wand2 } from "lucide-react";
 import { getPlaybookDetail } from "@/lib/methods-data";
+import { getStagesWithBlocks } from "@/lib/playbook-builder";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PlaybookDetailActions } from "@/components/admin/PlaybookDetailActions";
 import { DetailTabs, type TabDef } from "@/components/admin/DetailTabs";
 import { VersionsPanel } from "@/components/admin/VersionsPanel";
 import { ResourcesPanel } from "@/components/admin/ResourcesPanel";
-import { playbookTypeLabel } from "@/lib/methods";
+import { PlaybookValidationPanel } from "@/components/admin/PlaybookValidationPanel";
+import { playbookTypeLabel, durationUnitLabel } from "@/lib/methods";
 
 export const dynamic = "force-dynamic";
 
 const TABS: TabDef[] = [
   { id: "resumo", label: "Resumo" },
-  { id: "etapas", label: "Etapas" },
+  { id: "estrutura", label: "Estrutura" },
   { id: "recursos", label: "Recursos" },
+  { id: "validacao", label: "Validação" },
   { id: "versoes", label: "Versões" },
   { id: "historico", label: "Histórico" },
 ];
@@ -49,6 +52,10 @@ export default async function PlaybookDetailPage({ params }: { params: Promise<{
   if (!detail) notFound();
 
   const { playbook, method, product, versions, resources } = detail;
+  // Não chama ensureDraftVersion aqui — visitar o detalhe não deve abrir um
+  // rascunho sozinho. currentVersionId só existe depois que alguém abre o
+  // construtor pelo menos uma vez (Fase 2.1).
+  const stages = playbook.currentVersionId ? await getStagesWithBlocks(playbook.currentVersionId) : [];
 
   const resumo = (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -74,12 +81,57 @@ export default async function PlaybookDetailPage({ params }: { params: Promise<{
     </div>
   );
 
-  const etapas = (
-    <div className="rounded-2xl border border-dashed border-os-border bg-os-card/30 p-10 text-center">
-      <p className="text-sm font-semibold text-os-ink">Construtor de etapas e tarefas chega na Etapa 2.</p>
-      <p className="mt-1 text-xs text-os-muted">
-        Por enquanto, o playbook guarda o modelo (pré-requisitos, entregáveis, critérios de sucesso) na aba Resumo.
-      </p>
+  const totalBlocks = stages.reduce((sum, s) => sum + s.blocks.length, 0);
+
+  const estrutura = (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-os-border bg-os-card p-4">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-os-muted">
+          <span>{stages.length} etapas</span>
+          <span>{totalBlocks} blocos</span>
+        </div>
+        <Link
+          href={`/admin/playbooks/${playbook.id}/editor`}
+          className="flex items-center gap-1.5 rounded-lg bg-os-accent px-3.5 py-2 text-xs font-bold text-white hover:brightness-110"
+        >
+          <Wand2 className="h-3.5 w-3.5" /> Abrir Construtor
+        </Link>
+      </div>
+
+      {stages.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-os-border bg-os-card/30 p-10 text-center">
+          <p className="text-sm font-semibold text-os-ink">Este playbook ainda não possui etapas.</p>
+          <p className="mt-1 text-xs text-os-muted">Abra o Construtor para montar as etapas e os blocos operacionais.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {stages.map((stage, index) => (
+            <div key={stage.id} className="rounded-xl border border-os-border bg-os-card px-4 py-3">
+              <p className="text-sm font-bold text-os-ink">
+                {index + 1}. {stage.name}
+              </p>
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-os-muted">
+                {stage.durationValue != null && (
+                  <span>
+                    {stage.durationValue} {durationUnitLabel(stage.durationUnit)}
+                  </span>
+                )}
+                <span>
+                  {stage.blocks.length} {stage.blocks.length === 1 ? "bloco" : "blocos"}
+                </span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const validacao = playbook.currentVersionId ? (
+    <PlaybookValidationPanel playbookId={playbook.id} versionId={playbook.currentVersionId} />
+  ) : (
+    <div className="rounded-2xl border border-dashed border-os-border bg-os-card/30 p-10 text-center text-sm text-os-muted">
+      Abra o Construtor para validar a estrutura do playbook.
     </div>
   );
 
@@ -134,7 +186,7 @@ export default async function PlaybookDetailPage({ params }: { params: Promise<{
         <PlaybookDetailActions playbookId={playbook.id} status={playbook.status} />
       </div>
 
-      <DetailTabs tabs={TABS} content={{ resumo, etapas, recursos, versoes, historico }} />
+      <DetailTabs tabs={TABS} content={{ resumo, estrutura, recursos, validacao, versoes, historico }} />
     </div>
   );
 }

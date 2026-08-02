@@ -3,10 +3,12 @@
 // dois pontos de entrada: a aba do hub (/admin/metodos) e a rota dedicada
 // (/admin/metodos/biblioteca e /admin/playbooks) — uma implementação só,
 // evitando a duplicação citada nos riscos do design.md.
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { methods, methodProducts, methodStages, methodVersions, playbooks, playbookVersions, resources, products, adminUsers } from "@/db/schema";
-import type { MethodSummary, PlaybookSummary } from "@/types/methods";
+import type { MethodSummary, PlaybookSummary, PlaybookEditorData } from "@/types/methods";
+import { computeStageConfigStatus } from "@/lib/methods";
+import { getStagesWithBlocks } from "@/lib/playbook-builder";
 
 export async function getMethodDetail(id: string) {
   const [method] = await db.select().from(methods).where(eq(methods.id, id)).limit(1);
@@ -73,6 +75,59 @@ export async function getPlaybookDetail(id: string) {
     product: productRows[0] ?? null,
     versions: versionRows.map((v) => ({ ...v, createdAt: v.createdAt.toISOString() })),
     resources: resourceRows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })),
+  };
+}
+
+/**
+ * Payload do Construtor Visual (Fase 2.1). Recebe `versionId` já resolvido
+ * pelo chamador (ensureDraftVersion roda antes, na rota/página — esta
+ * função só lê, não decide transição de versão).
+ */
+export async function getPlaybookEditorData(playbookId: string, versionId: string): Promise<PlaybookEditorData | null> {
+  const [playbook] = await db.select().from(playbooks).where(eq(playbooks.id, playbookId)).limit(1);
+  if (!playbook) return null;
+
+  const [version] = await db
+    .select()
+    .from(playbookVersions)
+    .where(and(eq(playbookVersions.id, versionId), eq(playbookVersions.playbookId, playbookId)))
+    .limit(1);
+  if (!version) return null;
+
+  const [methodRows, productRows, authorRows, stagesWithBlocks] = await Promise.all([
+    db.select({ id: methods.id, name: methods.name }).from(methods).where(eq(methods.id, playbook.methodId)).limit(1),
+    db.select({ id: products.id, name: products.name }).from(products).where(eq(products.id, playbook.productId)).limit(1),
+    playbook.authorId
+      ? db.select({ id: adminUsers.id, name: adminUsers.name, email: adminUsers.email }).from(adminUsers).where(eq(adminUsers.id, playbook.authorId)).limit(1)
+      : Promise.resolve([]),
+    getStagesWithBlocks(versionId),
+  ]);
+
+  return {
+    playbook: {
+      ...playbook,
+      authorName: authorRows[0]?.name ?? authorRows[0]?.email ?? null,
+      publishedAt: playbook.publishedAt?.toISOString() ?? null,
+      createdAt: playbook.createdAt.toISOString(),
+      updatedAt: playbook.updatedAt.toISOString(),
+    },
+    method: methodRows[0] ?? null,
+    product: productRows[0] ?? null,
+    version: { id: version.id, versionLabel: version.versionLabel, status: version.status, createdAt: version.createdAt.toISOString() },
+    stages: stagesWithBlocks.map((stage) => {
+      const blocks = stage.blocks.map((block) => ({
+        ...block,
+        createdAt: block.createdAt.toISOString(),
+        updatedAt: block.updatedAt.toISOString(),
+      }));
+      return {
+        ...stage,
+        blocks,
+        createdAt: stage.createdAt.toISOString(),
+        updatedAt: stage.updatedAt.toISOString(),
+        configStatus: computeStageConfigStatus(stage, blocks),
+      };
+    }),
   };
 }
 
