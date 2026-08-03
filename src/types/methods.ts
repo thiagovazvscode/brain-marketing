@@ -130,6 +130,92 @@ export interface ResourceRow {
 
 // ── Fase 2.1 — Construtor visual de playbooks ───────────────────────────
 
+// ── Fase 2.2A — Reunião, Checklist, Formulário/Briefing, Documento ─────────
+// metadata (Reunião/Documento) fica tipado aqui só pro frontend; validação
+// de verdade acontece no servidor (lib/methods.ts), nunca confiando só nesse
+// tipo — ele documenta o shape, não garante nada em runtime.
+
+export interface MeetingBlockMetadata {
+  objective?: string;
+  meetingType?: string;
+  durationValue?: number | null;
+  durationUnit?: string;
+  format?: string;
+  internalParticipantRoles?: string[];
+  clientParticipants?: string[];
+  participantsRequired?: boolean;
+  mainContactRole?: string;
+  prerequisites?: string[];
+  requiredDocuments?: string[];
+  agenda?: string[];
+  keyQuestions?: string[];
+  materialsToSend?: string[];
+  recordRequired?: boolean;
+  requiresMinutes?: boolean;
+  expectedDecision?: string;
+  associatedDeliverable?: string;
+  notes?: string;
+  rescheduleTolerance?: string;
+}
+
+export interface DocumentBlockMetadata {
+  documentKind?: string;
+  origin?: string;
+  category?: string;
+  templateFileNote?: string;
+  resourceId?: string | null;
+  acceptedFormats?: string[];
+  requiresApproval?: boolean;
+  visibility?: string;
+}
+
+export interface FormBlockMetadata {
+  introduction?: string;
+  respondentInstructions?: string;
+  respondentType?: string;
+  respondentRole?: string;
+}
+
+export interface FormQuestionValidation {
+  minLength?: number;
+  maxLength?: number;
+  minValue?: number;
+  maxValue?: number;
+  allowedFormats?: string[];
+}
+
+export interface PlaybookChecklistItemRow {
+  id: string;
+  blockId: string;
+  title: string;
+  description: string | null;
+  groupName: string | null;
+  position: number;
+  isRequired: boolean;
+  requiresEvidence: boolean;
+  allowsNotes: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlaybookFormQuestionRow {
+  id: string;
+  blockId: string;
+  label: string;
+  helpText: string | null;
+  questionType: string;
+  placeholder: string | null;
+  options: string[];
+  // Shape real é FormQuestionValidation — cast pontual em quem lê.
+  validation: Record<string, unknown> | null;
+  sectionName: string | null;
+  position: number;
+  isRequired: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PlaybookBlockRow {
   id: string;
   playbookVersionId: string;
@@ -154,7 +240,12 @@ export interface PlaybookBlockRow {
   completionCriteria: string | null;
   overdueAction: string | null;
   clientExpectedResponse: string | null;
+  // Shape real é MeetingBlockMetadata | DocumentBlockMetadata | FormBlockMetadata
+  // conforme block.type — quem lê faz o cast pontual (metadata as MeetingBlockMetadata).
+  metadata: Record<string, unknown> | null;
   tags: string[];
+  checklistItems: PlaybookChecklistItemRow[];
+  formQuestions: PlaybookFormQuestionRow[];
   createdAt: string;
   updatedAt: string;
 }
@@ -189,12 +280,19 @@ export interface PlaybookEditorVersion {
   createdAt: string;
 }
 
+export interface PlaybookResourceOption {
+  id: string;
+  title: string;
+  type: string;
+}
+
 export interface PlaybookEditorData {
   playbook: PlaybookDetail;
   method: SimpleOption | null;
   product: SimpleOption | null;
   version: PlaybookEditorVersion;
   stages: PlaybookStageRow[];
+  resources: PlaybookResourceOption[];
 }
 
 export interface ValidationIssue {
@@ -203,6 +301,17 @@ export interface ValidationIssue {
   stageId?: string;
   blockId?: string;
   message: string;
+  // Chave estável (não a mensagem, que é texto livre) usada só pelo client
+  // pra abrir a seção certa do painel e focar o campo problemático ao
+  // clicar no problema na Validação — ver FIELD_SECTION_MAP em
+  // PlaybookConfigPanel.tsx.
+  field?: string;
+  // Identificador estável da regra que gerou o problema — junto com
+  // stageId/blockId/field/severity forma a chave conceitual usada pra
+  // deduplicar problemas equivalentes (ex.: regra genérica de bloco vs.
+  // regra específica do tipo dizendo a mesma coisa). Ver DUE_SPECIFIC_CODES
+  // em validate/route.ts.
+  code: string;
 }
 
 export interface PlaybookValidationResult {

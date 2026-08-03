@@ -3,17 +3,25 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { PlaybookEditorData, PlaybookStageRow, SimpleOption } from "@/types/methods";
+import type {
+  PlaybookChecklistItemRow,
+  PlaybookEditorData,
+  PlaybookFormQuestionRow,
+  PlaybookStageRow,
+  SimpleOption,
+} from "@/types/methods";
 import { PlaybookEditorHeader } from "@/components/admin/PlaybookEditorHeader";
 import { PlaybookStagesColumn } from "@/components/admin/PlaybookStagesColumn";
 import { PlaybookStageContent } from "@/components/admin/PlaybookStageContent";
 import { PlaybookConfigPanel } from "@/components/admin/PlaybookConfigPanel";
 import { StageFormPanel, type StageDraft } from "@/components/admin/StageFormPanel";
 import { BlockTypePicker } from "@/components/admin/BlockTypePicker";
+import { NewBlockDialog } from "@/components/admin/blocks/NewBlockDialog";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PlaybookPreview } from "@/components/admin/PlaybookPreview";
-import { PlaybookValidationPanel } from "@/components/admin/PlaybookValidationPanel";
+import { PlaybookValidationModal } from "@/components/admin/PlaybookValidationPanel";
 import { EmptyStagePlaceholder } from "@/components/admin/EmptyStagePlaceholder";
+import type { FocusHint } from "@/components/admin/PlaybookConfigPanel";
 
 export type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
@@ -42,6 +50,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showStageForm, setShowStageForm] = useState(false);
   const [blockPickerStageId, setBlockPickerStageId] = useState<string | null>(null);
+  const [newBlockType, setNewBlockType] = useState<"meeting" | "checklist" | "form_briefing" | "document" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
@@ -49,6 +58,8 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [formQuestionError, setFormQuestionError] = useState<string | null>(null);
+  const [focusHint, setFocusHint] = useState<FocusHint | null>(null);
 
   const selectedStage = selection ? stages.find((s) => s.id === selection.stageId) ?? null : null;
   const selectedBlock =
@@ -136,6 +147,9 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   }
 
   // ── Blocos ──────────────────────────────────────────────────────────
+  // internal_task/client_request continuam com criação imediata (Fase 2.1,
+  // comportamento aprovado, não mexer). Os 4 tipos novos passam pelo diálogo
+  // de configuração inicial (createRichBlock) — só criam ao salvar.
   async function createBlock(stageId: string, type: "internal_task" | "client_request") {
     try {
       const defaultTitle = type === "internal_task" ? "Nova tarefa interna" : "Nova solicitação ao cliente";
@@ -149,6 +163,42 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
     } catch (e) {
       reportError(e instanceof Error ? e.message : "Não foi possível criar o bloco.");
     }
+  }
+
+  async function createRichBlock(
+    stageId: string,
+    type: "meeting" | "checklist" | "form_briefing" | "document",
+    payload: {
+      title: string;
+      metadata?: Record<string, unknown>;
+      checklistItems?: { title: string }[];
+      questions?: { label: string; questionType: string }[];
+    }
+  ) {
+    const { block } = await api<{ block: { id: string } }>(`${base}/stages/${stageId}/blocks`, {
+      method: "POST",
+      body: JSON.stringify({ type, title: payload.title, metadata: payload.metadata }),
+    });
+
+    // Itens/perguntas escolhidos na criação são criados em sequência
+    // (posição calculada no servidor a cada chamada) — só depois que o
+    // bloco em si já existe.
+    if (payload.checklistItems) {
+      for (const item of payload.checklistItems) {
+        await api(`${base}/stages/${stageId}/blocks/${block.id}/checklist-items`, { method: "POST", body: JSON.stringify(item) });
+      }
+    }
+    if (payload.questions) {
+      for (const q of payload.questions) {
+        await api(`${base}/stages/${stageId}/blocks/${block.id}/questions`, { method: "POST", body: JSON.stringify(q) });
+      }
+    }
+
+    setNewBlockType(null);
+    setBlockPickerStageId(null);
+    await refetch();
+    setSelection({ kind: "block", stageId, blockId: block.id });
+    setConfigOpen(true);
   }
 
   async function duplicateBlock(stageId: string, blockId: string) {
@@ -193,6 +243,127 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
     } catch {
       setStages(previous);
       reportError("Não foi possível reordenar os blocos.");
+    }
+  }
+
+  // ── Itens de checklist ────────────────────────────────────────────────
+  async function createChecklistItem(stageId: string, blockId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/checklist-items`, { method: "POST", body: JSON.stringify({ title: "Novo item" }) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível criar o item.");
+    }
+  }
+
+  async function updateChecklistItem(stageId: string, blockId: string, itemId: string, patch: Record<string, unknown>) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify(patch) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível atualizar o item.");
+    }
+  }
+
+  // Duplicar item/pergunta reaproveita o mesmo endpoint de criação (já
+  // aceita todos os campos) — sem rota nova, sem migration.
+  async function duplicateChecklistItem(stageId: string, blockId: string, item: PlaybookChecklistItemRow) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/checklist-items`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: `${item.title} (cópia)`,
+          description: item.description ?? undefined,
+          groupName: item.groupName ?? undefined,
+          isRequired: item.isRequired,
+          requiresEvidence: item.requiresEvidence,
+          allowsNotes: item.allowsNotes,
+        }),
+      });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível duplicar o item.");
+    }
+  }
+
+  async function deleteChecklistItem(stageId: string, blockId: string, itemId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/checklist-items/${itemId}`, { method: "DELETE" });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir o item.");
+    }
+  }
+
+  async function reorderChecklistItems(stageId: string, blockId: string, orderedIds: string[]) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/checklist-items/reorder`, { method: "POST", body: JSON.stringify({ orderedIds }) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível reordenar os itens.");
+    }
+  }
+
+  // ── Perguntas de formulário ──────────────────────────────────────────
+  // Erro de validação de opções/tipo mostra no próprio construtor central
+  // (formQuestionError), não no banner global — é sobre um campo específico.
+  async function createQuestion(stageId: string, blockId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/questions`, { method: "POST", body: JSON.stringify({ label: "Nova pergunta", questionType: "texto_curto" }) });
+      setFormQuestionError(null);
+      await refetch();
+    } catch (e) {
+      setFormQuestionError(e instanceof Error ? e.message : "Não foi possível criar a pergunta.");
+    }
+  }
+
+  async function updateQuestion(stageId: string, blockId: string, questionId: string, patch: Record<string, unknown>) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/questions/${questionId}`, { method: "PATCH", body: JSON.stringify(patch) });
+      setFormQuestionError(null);
+      await refetch();
+    } catch (e) {
+      setFormQuestionError(e instanceof Error ? e.message : "Não foi possível atualizar a pergunta.");
+    }
+  }
+
+  async function duplicateQuestion(stageId: string, blockId: string, question: PlaybookFormQuestionRow) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/questions`, {
+        method: "POST",
+        body: JSON.stringify({
+          label: `${question.label} (cópia)`,
+          helpText: question.helpText ?? undefined,
+          questionType: question.questionType,
+          placeholder: question.placeholder ?? undefined,
+          options: question.options,
+          validation: question.validation ?? undefined,
+          sectionName: question.sectionName ?? undefined,
+          isRequired: question.isRequired,
+        }),
+      });
+      setFormQuestionError(null);
+      await refetch();
+    } catch (e) {
+      setFormQuestionError(e instanceof Error ? e.message : "Não foi possível duplicar a pergunta.");
+    }
+  }
+
+  async function deleteQuestion(stageId: string, blockId: string, questionId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/questions/${questionId}`, { method: "DELETE" });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir a pergunta.");
+    }
+  }
+
+  async function reorderQuestions(stageId: string, blockId: string, orderedIds: string[]) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/questions/reorder`, { method: "POST", body: JSON.stringify({ orderedIds }) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível reordenar as perguntas.");
     }
   }
 
@@ -284,6 +455,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             stage={selectedStage}
             totalStages={stages.length}
             selectedBlockId={selectedBlock?.id ?? null}
+            selectedBlock={selectedBlock}
             assigneeOptions={assigneeOptions}
             onSelectBlock={(blockId) => {
               if (selectedStage) {
@@ -291,10 +463,23 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
                 setConfigOpen(true);
               }
             }}
+            onBack={() => selectedStage && setSelection({ kind: "stage", stageId: selectedStage.id })}
             onAddBlock={() => selectedStage && setBlockPickerStageId(selectedStage.id)}
             onDuplicateBlock={(blockId) => selectedStage && duplicateBlock(selectedStage.id, blockId)}
             onDeleteBlock={(blockId) => selectedStage && requestDeleteBlock(selectedStage.id, blockId)}
             onReorderBlocks={(orderedIds) => selectedStage && reorderBlocks(selectedStage.id, orderedIds)}
+            onCreateChecklistItem={(blockId) => selectedStage && createChecklistItem(selectedStage.id, blockId)}
+            onUpdateChecklistItem={(blockId, itemId, patch) => selectedStage && updateChecklistItem(selectedStage.id, blockId, itemId, patch)}
+            onDeleteChecklistItem={(blockId, itemId) => selectedStage && deleteChecklistItem(selectedStage.id, blockId, itemId)}
+            onDuplicateChecklistItem={(blockId, item) => selectedStage && duplicateChecklistItem(selectedStage.id, blockId, item)}
+            onReorderChecklistItems={(blockId, orderedIds) => selectedStage && reorderChecklistItems(selectedStage.id, blockId, orderedIds)}
+            onCreateQuestion={(blockId) => selectedStage && createQuestion(selectedStage.id, blockId)}
+            onUpdateQuestion={(blockId, questionId, patch) => selectedStage && updateQuestion(selectedStage.id, blockId, questionId, patch)}
+            onDeleteQuestion={(blockId, questionId) => selectedStage && deleteQuestion(selectedStage.id, blockId, questionId)}
+            onDuplicateQuestion={(blockId, question) => selectedStage && duplicateQuestion(selectedStage.id, blockId, question)}
+            onReorderQuestions={(blockId, orderedIds) => selectedStage && reorderQuestions(selectedStage.id, blockId, orderedIds)}
+            formQuestionError={formQuestionError}
+            focusHint={focusHint}
           />
 
           {/* Painel de configuração: coluna fixa e sticky em desktop (xl+);
@@ -324,12 +509,14 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
                   stage={selectedStage}
                   block={selectedBlock}
                   assigneeOptions={assigneeOptions}
+                  resourceOptions={initialData.resources}
                   saveState={saveState}
                   onSaveStage={saveStage}
                   onSaveBlock={saveBlock}
                   onDuplicateBlock={duplicateBlock}
                   onDeleteBlock={requestDeleteBlock}
                   onStatusChange={setSaveState}
+                  focusHint={focusHint}
                 />
               </div>
             </div>
@@ -339,8 +526,28 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
 
       {showStageForm && <StageFormPanel onCancel={() => setShowStageForm(false)} onSubmit={createStage} />}
 
-      {blockPickerStageId && (
-        <BlockTypePicker onCancel={() => setBlockPickerStageId(null)} onSelect={(type) => createBlock(blockPickerStageId, type)} />
+      {blockPickerStageId && !newBlockType && (
+        <BlockTypePicker
+          onCancel={() => setBlockPickerStageId(null)}
+          onSelect={(type) => {
+            if (type === "internal_task" || type === "client_request") {
+              createBlock(blockPickerStageId, type);
+            } else {
+              setNewBlockType(type);
+            }
+          }}
+        />
+      )}
+
+      {blockPickerStageId && newBlockType && (
+        <NewBlockDialog
+          type={newBlockType}
+          onCancel={() => {
+            setNewBlockType(null);
+            setBlockPickerStageId(null);
+          }}
+          onSubmit={(payload) => createRichBlock(blockPickerStageId, newBlockType, payload)}
+        />
       )}
 
       {deleteTarget?.kind === "stage" && (
@@ -366,22 +573,26 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
           playbookName={initialData.playbook.name}
           version={initialData.version.versionLabel}
           stages={stages}
+          assigneeOptions={assigneeOptions}
           onClose={() => setShowPreview(false)}
         />
       )}
 
       {showValidation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowValidation(false)}>
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <PlaybookValidationPanel playbookId={initialData.playbook.id} versionId={initialData.version.id} refreshKey={validationRefreshKey} />
-            <button
-              onClick={() => setShowValidation(false)}
-              className="mt-3 w-full rounded-lg border border-os-border bg-os-card py-2 text-sm font-semibold text-os-ink hover:bg-os-bg"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
+        <PlaybookValidationModal
+          playbookId={initialData.playbook.id}
+          versionId={initialData.version.id}
+          refreshKey={validationRefreshKey}
+          onSelectIssue={(issue) => {
+            const stageId = issue.stageId;
+            if (!stageId) return;
+            setSelection(issue.blockId ? { kind: "block", stageId, blockId: issue.blockId } : { kind: "stage", stageId });
+            setConfigOpen(true);
+            setShowValidation(false);
+            setFocusHint({ field: issue.field, nonce: Date.now() });
+          }}
+          onClose={() => setShowValidation(false)}
+        />
       )}
     </div>
   );

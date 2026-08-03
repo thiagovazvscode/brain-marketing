@@ -94,13 +94,16 @@ export async function getPlaybookEditorData(playbookId: string, versionId: strin
     .limit(1);
   if (!version) return null;
 
-  const [methodRows, productRows, authorRows, stagesWithBlocks] = await Promise.all([
+  const [methodRows, productRows, authorRows, stagesWithBlocks, resourceRows] = await Promise.all([
     db.select({ id: methods.id, name: methods.name }).from(methods).where(eq(methods.id, playbook.methodId)).limit(1),
     db.select({ id: products.id, name: products.name }).from(products).where(eq(products.id, playbook.productId)).limit(1),
     playbook.authorId
       ? db.select({ id: adminUsers.id, name: adminUsers.name, email: adminUsers.email }).from(adminUsers).where(eq(adminUsers.id, playbook.authorId)).limit(1)
       : Promise.resolve([]),
     getStagesWithBlocks(versionId),
+    // Só pro bloco Documento vincular (Fase 2.2A) — nunca duplica o arquivo,
+    // só guarda o vínculo (resourceId) em metadata.
+    db.select({ id: resources.id, title: resources.title, type: resources.type }).from(resources).where(eq(resources.playbookId, playbookId)),
   ]);
 
   return {
@@ -119,6 +122,16 @@ export async function getPlaybookEditorData(playbookId: string, versionId: strin
         ...block,
         createdAt: block.createdAt.toISOString(),
         updatedAt: block.updatedAt.toISOString(),
+        checklistItems: block.checklistItems.map((item) => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        })),
+        formQuestions: block.formQuestions.map((q) => ({
+          ...q,
+          createdAt: q.createdAt.toISOString(),
+          updatedAt: q.updatedAt.toISOString(),
+        })),
       }));
       return {
         ...stage,
@@ -128,6 +141,7 @@ export async function getPlaybookEditorData(playbookId: string, versionId: strin
         configStatus: computeStageConfigStatus(stage, blocks),
       };
     }),
+    resources: resourceRows,
   };
 }
 

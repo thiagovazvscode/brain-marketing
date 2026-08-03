@@ -750,8 +750,56 @@ export const playbookBlockTemplates = pgTable("playbook_block_templates", {
   overdueAction: text("overdue_action"),
   // Só usado por client_request: o que o cliente precisa enviar/responder.
   clientExpectedResponse: text("client_expected_response"),
-  metadata: jsonb("metadata"),
+  // Reunião e Documento (Fase 2.2A) guardam a config específica de tipo
+  // aqui — tipada e validada em app (lib/methods.ts), nunca confiando só no
+  // frontend. Evita dezenas de colunas nullable pra 2 tipos que não têm
+  // sub-itens (ao contrário de Checklist/Formulário, que têm tabela filha
+  // própria porque cada item/pergunta precisa de ID, edição e reordenação
+  // independentes).
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Item de um bloco Checklist (Fase 2.2A). blockId em cascade: apagar o
+// bloco apaga os itens junto — não há sentido em item órfão, e evita ter
+// que replicar a limpeza manual que dependencyBlockId precisa (auto-
+// referência opcional, caso diferente).
+export const playbookChecklistItems = pgTable("playbook_checklist_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  groupName: text("group_name"),
+  position: integer("position").notNull().default(0),
+  isRequired: boolean("is_required").notNull().default(true),
+  requiresEvidence: boolean("requires_evidence").notNull().default(false),
+  allowsNotes: boolean("allows_notes").notNull().default(true),
+  // "ativo ou arquivado" do pedido — soft-hide sem apagar; excluir de
+  // verdade é uma ação separada (DELETE), com confirmação no frontend
+  // quando o item já tiver configuração relevante.
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Pergunta de um bloco Formulário/Briefing (Fase 2.2A). Mesmo raciocínio de
+// cascade do checklist. "options" só é relevante pra selecao_unica/
+// selecao_multipla; "validation" guarda min/max de caracteres ou valor e
+// formatos aceitos — pequeno o bastante pra não justificar tabela própria.
+export const playbookFormQuestions = pgTable("playbook_form_questions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  helpText: text("help_text"),
+  questionType: text("question_type").notNull(),
+  placeholder: text("placeholder"),
+  options: jsonb("options").$type<string[]>().notNull().default([]),
+  validation: jsonb("validation").$type<Record<string, unknown>>(),
+  sectionName: text("section_name"),
+  position: integer("position").notNull().default(0),
+  isRequired: boolean("is_required").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

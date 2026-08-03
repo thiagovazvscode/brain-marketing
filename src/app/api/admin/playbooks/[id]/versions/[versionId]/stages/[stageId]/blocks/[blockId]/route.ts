@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { playbookBlockTemplates } from "@/db/schema";
+import { playbookBlockTemplates, resources } from "@/db/schema";
 import { loadBlockInStage } from "@/lib/playbook-builder";
 import {
   isActivePlaybookBlockType,
@@ -12,6 +12,8 @@ import {
   isValidPlaybookBlockAssigneeType,
   isValidPlaybookBlockPriority,
   isValidPlaybookBlockType,
+  sanitizeDocumentMetadata,
+  sanitizeMeetingMetadata,
 } from "@/lib/methods";
 
 interface BlockPatchBody {
@@ -34,7 +36,32 @@ interface BlockPatchBody {
   completionCriteria?: string;
   overdueAction?: string | null;
   clientExpectedResponse?: string;
+  metadata?: Record<string, unknown>;
   tags?: string[];
+}
+
+// O frontend sempre manda o objeto metadata inteiro (nunca um delta parcial
+// de sub-campo) quando algo muda nele — por isso o PATCH pode substituir
+// metadata inteiro sem precisar fazer merge com o valor salvo antes.
+async function resolveMetadataPatch(
+  type: string,
+  raw: Record<string, unknown> | undefined
+): Promise<{ metadata: Record<string, unknown> | null } | { error: string } | { skip: true }> {
+  if (raw === undefined) return { skip: true };
+  if (type === "meeting") {
+    const result = sanitizeMeetingMetadata(raw);
+    return "error" in result ? result : { metadata: result.metadata };
+  }
+  if (type === "document") {
+    const result = sanitizeDocumentMetadata(raw);
+    if ("error" in result) return result;
+    if (result.metadata.resourceId) {
+      const [resource] = await db.select({ id: resources.id }).from(resources).where(eq(resources.id, result.metadata.resourceId as string)).limit(1);
+      if (!resource) return { error: "Recurso vinculado não encontrado." };
+    }
+    return { metadata: result.metadata };
+  }
+  return { metadata: null };
 }
 
 export async function PATCH(
@@ -95,7 +122,11 @@ export async function PATCH(
       }
     }
 
+    const metadataResult = await resolveMetadataPatch(body.type ?? chain.block.type, body.metadata);
+    if ("error" in metadataResult) return NextResponse.json({ error: metadataResult.error }, { status: 400 });
+
     const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (!("skip" in metadataResult)) patch.metadata = metadataResult.metadata;
     if (body.type !== undefined) patch.type = body.type;
     if (body.title !== undefined) patch.title = body.title.trim();
     if (body.description !== undefined) patch.description = body.description.trim() || null;

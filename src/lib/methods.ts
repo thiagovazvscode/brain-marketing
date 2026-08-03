@@ -129,25 +129,329 @@ export const DURATION_UNITS = [
 
 export type DurationUnitId = (typeof DURATION_UNITS)[number]["id"];
 
-// Os 2 primeiros são implementados nesta rodada (active: true); os demais
-// aparecem na barra "Adicionar bloco" desabilitados, com rótulo de próxima
-// entrega — não fingir que estão funcionais (regra explícita do pedido).
+// Fase 2.1: só os 2 primeiros (active:true). Fase 2.2A: seletor já mostra
+// meeting/checklist/form_briefing/document com categoria/cor/descrição
+// definitivas, mas active:false até o construtor de cada um existir (steps
+// 7-14 do plano, depois da autorização da migration) — vira active:true tipo
+// por tipo, nunca todos de uma vez, regra explícita de não fingir
+// funcionalidade. Os 6 finais são as "próximas entregas" de verdade.
 export const PLAYBOOK_BLOCK_TYPES = [
-  { id: "internal_task", label: "Tarefa interna", active: true },
-  { id: "client_request", label: "Solicitação ao cliente", active: true },
-  { id: "meeting", label: "Reunião", active: false },
-  { id: "checklist", label: "Checklist", active: false },
-  { id: "form_briefing", label: "Formulário ou briefing", active: false },
-  { id: "document", label: "Documento", active: false },
-  { id: "analysis", label: "Análise", active: false },
-  { id: "deliverable", label: "Entregável", active: false },
-  { id: "approval", label: "Aprovação", active: false },
-  { id: "wait", label: "Espera", active: false },
-  { id: "milestone", label: "Marco", active: false },
-  { id: "condition", label: "Condição", active: false },
+  { id: "internal_task", label: "Tarefa interna", active: true, category: "execucao", description: "Atividade executada pela equipe interna.", color: "violet" },
+  { id: "client_request", label: "Solicitação ao cliente", active: true, category: "execucao", description: "Solicitações de informações ou ações para o cliente.", color: "blue" },
+  { id: "checklist", label: "Checklist", active: true, category: "execucao", description: "Lista de itens que precisam ser verificados ou concluídos.", color: "teal" },
+  { id: "meeting", label: "Reunião", active: true, category: "interacao", description: "Reuniões e encontros com o cliente ou equipe.", color: "orange" },
+  { id: "form_briefing", label: "Formulário / Briefing", active: true, category: "interacao", description: "Coleta estruturada de informações com o cliente ou equipe.", color: "pink" },
+  { id: "document", label: "Documento", active: true, category: "conteudo", description: "Documentos necessários, de referência ou produzidos.", color: "slate" },
+  { id: "analysis", label: "Análise", active: false, category: "futuro", description: "Análise estruturada de dados ou contexto do cliente.", color: "slate" },
+  { id: "deliverable", label: "Entregável", active: false, category: "futuro", description: "Entrega formal de um resultado ao cliente.", color: "slate" },
+  { id: "approval", label: "Aprovação", active: false, category: "futuro", description: "Aprovação formal de uma etapa ou entrega.", color: "slate" },
+  { id: "milestone", label: "Marco", active: false, category: "futuro", description: "Marco de referência na linha do tempo do playbook.", color: "slate" },
+  { id: "wait", label: "Espera", active: false, category: "futuro", description: "Período de espera antes de seguir para o próximo bloco.", color: "slate" },
+  { id: "condition", label: "Condição", active: false, category: "futuro", description: "Ramificação condicional entre blocos.", color: "slate" },
 ] as const;
 
 export type PlaybookBlockTypeId = (typeof PLAYBOOK_BLOCK_TYPES)[number]["id"];
+
+export const PLAYBOOK_BLOCK_CATEGORIES = [
+  { id: "execucao", label: "Execução" },
+  { id: "interacao", label: "Interação" },
+  { id: "conteudo", label: "Conteúdo e arquivos" },
+  { id: "futuro", label: "Próximas entregas" },
+] as const;
+
+// ── Fase 2.2A — Reunião, Checklist, Formulário/Briefing, Documento ─────────
+// Todas as listas abaixo são texto validado em app (mesmo raciocínio de
+// overdueAction/dueOffsetAnchor): conjuntos que tendem a crescer, guardados
+// em playbook_block_templates.metadata (Reunião/Documento) ou em colunas de
+// texto nas tabelas filhas (Checklist/Formulário) — nunca enum do banco.
+
+export const MEETING_TYPES = [
+  { id: "imersao", label: "Imersão" },
+  { id: "alinhamento", label: "Alinhamento" },
+  { id: "diagnostico", label: "Diagnóstico" },
+  { id: "devolutiva", label: "Devolutiva" },
+  { id: "treinamento", label: "Treinamento" },
+  { id: "acompanhamento", label: "Acompanhamento" },
+  { id: "personalizada", label: "Reunião personalizada" },
+] as const;
+
+export const MEETING_DURATION_UNITS = [
+  { id: "minutos", label: "Minutos" },
+  { id: "horas", label: "Horas" },
+] as const;
+
+export const MEETING_FORMATS = [
+  { id: "online", label: "Online" },
+  { id: "presencial", label: "Presencial" },
+  { id: "hibrido", label: "Híbrido" },
+  { id: "definir_posteriormente", label: "Definir posteriormente" },
+] as const;
+
+// Reaproveitado pelo participante externo principal da Reunião e pelo
+// respondente do Formulário — mesmo conjunto citado nas duas seções do pedido.
+export const PLAYBOOK_EXTERNAL_CONTACT_ROLES = [
+  { id: "socio", label: "Sócio" },
+  { id: "gestor_comercial_cliente", label: "Gestor comercial" },
+  { id: "responsavel_atendimento", label: "Responsável pelo atendimento" },
+  { id: "equipe_vendas", label: "Equipe de vendas" },
+  { id: "financeiro_cliente", label: "Financeiro" },
+  { id: "marketing_cliente", label: "Marketing" },
+  { id: "outro", label: "Outro" },
+] as const;
+
+export const DOCUMENT_KINDS = [
+  { id: "necessario", label: "Documento necessário" },
+  { id: "referencia", label: "Documento de referência" },
+  { id: "produzido", label: "Documento produzido" },
+] as const;
+
+export const DOCUMENT_ORIGINS = [
+  { id: "brain", label: "Brain" },
+  { id: "cliente", label: "Cliente" },
+  { id: "externo", label: "Externo" },
+  { id: "definir_ao_aplicar", label: "Definir ao aplicar" },
+] as const;
+
+export const DOCUMENT_CATEGORIES = [
+  { id: "contrato", label: "Contrato" },
+  { id: "relatorio", label: "Relatório" },
+  { id: "planilha", label: "Planilha" },
+  { id: "apresentacao", label: "Apresentação" },
+  { id: "briefing", label: "Briefing" },
+  { id: "evidencia", label: "Evidência" },
+  { id: "material_apoio", label: "Material de apoio" },
+  { id: "outro", label: "Outro" },
+] as const;
+
+export const DOCUMENT_FORMATS = [
+  { id: "pdf", label: "PDF" },
+  { id: "doc", label: "DOC" },
+  { id: "docx", label: "DOCX" },
+  { id: "xls", label: "XLS" },
+  { id: "xlsx", label: "XLSX" },
+  { id: "csv", label: "CSV" },
+  { id: "jpg", label: "JPG" },
+  { id: "png", label: "PNG" },
+  { id: "zip", label: "ZIP" },
+  { id: "url", label: "URL" },
+  { id: "outro", label: "Outro" },
+] as const;
+
+export const DOCUMENT_VISIBILITY = [
+  { id: "equipe_brain", label: "Apenas equipe Brain" },
+  { id: "equipe_e_cliente", label: "Equipe e cliente" },
+  { id: "apenas_responsaveis", label: "Apenas responsáveis" },
+  { id: "definir_ao_aplicar", label: "Definir ao aplicar" },
+] as const;
+
+export const FORM_RESPONDENT_TYPES = [
+  { id: "cliente", label: "Cliente" },
+  { id: "equipe_brain", label: "Equipe Brain" },
+  { id: "ambos", label: "Ambos" },
+  { id: "definir_ao_aplicar", label: "Definir ao aplicar" },
+] as const;
+
+export const FORM_QUESTION_TYPES = [
+  { id: "texto_curto", label: "Texto curto" },
+  { id: "texto_longo", label: "Texto longo" },
+  { id: "numero", label: "Número" },
+  { id: "moeda", label: "Moeda" },
+  { id: "data", label: "Data" },
+  { id: "selecao_unica", label: "Seleção única" },
+  { id: "multipla_selecao", label: "Múltipla seleção" },
+  { id: "sim_nao", label: "Sim ou não" },
+  { id: "arquivo", label: "Arquivo" },
+  { id: "url", label: "URL" },
+] as const;
+
+export type FormQuestionTypeId = (typeof FORM_QUESTION_TYPES)[number]["id"];
+// Tipos que exigem lista de opções (>= 2) — mesma regra pros dois.
+export const FORM_QUESTION_TYPES_WITH_OPTIONS: FormQuestionTypeId[] = ["selecao_unica", "multipla_selecao"];
+
+// Limites defensivos (item 19 do pedido) — nunca confiar só no frontend.
+export const MAX_CHECKLIST_ITEMS_PER_BLOCK = 100;
+export const MAX_FORM_QUESTIONS_PER_BLOCK = 100;
+export const MAX_FORM_QUESTION_OPTIONS = 100;
+export const MAX_SHORT_TEXT_LENGTH = 300;
+export const MAX_LONG_TEXT_LENGTH = 4000;
+export const MAX_LIST_ENTRY_LENGTH = 500;
+export const MAX_LIST_ENTRIES = 50;
+
+export const meetingTypeLabel = (id: string | null) => labelOf(MEETING_TYPES, id);
+export const meetingDurationUnitLabel = (id: string | null) => labelOf(MEETING_DURATION_UNITS, id);
+export const meetingFormatLabel = (id: string | null) => labelOf(MEETING_FORMATS, id);
+export const externalContactRoleLabel = (id: string | null) => labelOf(PLAYBOOK_EXTERNAL_CONTACT_ROLES, id);
+export const documentKindLabel = (id: string | null) => labelOf(DOCUMENT_KINDS, id);
+export const documentOriginLabel = (id: string | null) => labelOf(DOCUMENT_ORIGINS, id);
+export const documentCategoryLabel = (id: string | null) => labelOf(DOCUMENT_CATEGORIES, id);
+export const documentFormatLabel = (id: string | null) => labelOf(DOCUMENT_FORMATS, id);
+export const documentVisibilityLabel = (id: string | null) => labelOf(DOCUMENT_VISIBILITY, id);
+export const formRespondentTypeLabel = (id: string | null) => labelOf(FORM_RESPONDENT_TYPES, id);
+export const formQuestionTypeLabel = (id: string | null) => labelOf(FORM_QUESTION_TYPES, id);
+
+export const isValidMeetingType = (id: string) => MEETING_TYPES.some((s) => s.id === id);
+export const isValidMeetingDurationUnit = (id: string) => MEETING_DURATION_UNITS.some((s) => s.id === id);
+export const isValidMeetingFormat = (id: string) => MEETING_FORMATS.some((s) => s.id === id);
+export const isValidExternalContactRole = (id: string) => PLAYBOOK_EXTERNAL_CONTACT_ROLES.some((s) => s.id === id);
+export const isValidDocumentKind = (id: string) => DOCUMENT_KINDS.some((s) => s.id === id);
+export const isValidDocumentOrigin = (id: string) => DOCUMENT_ORIGINS.some((s) => s.id === id);
+export const isValidDocumentCategory = (id: string) => DOCUMENT_CATEGORIES.some((s) => s.id === id);
+export const isValidDocumentFormat = (id: string) => DOCUMENT_FORMATS.some((s) => s.id === id);
+export const isValidDocumentVisibility = (id: string) => DOCUMENT_VISIBILITY.some((s) => s.id === id);
+export const isValidFormRespondentType = (id: string) => FORM_RESPONDENT_TYPES.some((s) => s.id === id);
+export const isValidFormQuestionType = (id: string): id is FormQuestionTypeId => FORM_QUESTION_TYPES.some((s) => s.id === id);
+
+/** Só deixa passar chaves conhecidas com o tipo certo — nunca confia no shape que vier do cliente. */
+export function sanitizeFormQuestionValidation(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object") return null;
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  if (typeof src.minLength === "number" && src.minLength >= 0) out.minLength = src.minLength;
+  if (typeof src.maxLength === "number" && src.maxLength >= 0) out.maxLength = src.maxLength;
+  if (typeof src.minValue === "number") out.minValue = src.minValue;
+  if (typeof src.maxValue === "number") out.maxValue = src.maxValue;
+  if (Array.isArray(src.allowedFormats)) out.allowedFormats = src.allowedFormats.filter((f) => typeof f === "string").slice(0, 20);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Seleção única/múltipla exige >= 2 opções válidas (regra explícita do pedido); outros tipos ignoram options. */
+export function validateFormQuestionOptions(
+  questionType: string,
+  options: string[] | undefined
+): { options: string[] } | { error: string } {
+  const cleaned = (options ?? []).map((o) => o.trim()).filter(Boolean);
+  if (FORM_QUESTION_TYPES_WITH_OPTIONS.includes(questionType as never)) {
+    if (cleaned.length < 2) return { error: "Perguntas de seleção exigem pelo menos duas opções válidas." };
+    if (cleaned.length > MAX_FORM_QUESTION_OPTIONS) return { error: `Limite de ${MAX_FORM_QUESTION_OPTIONS} opções por pergunta.` };
+    if (cleaned.some((o) => o.length > MAX_LIST_ENTRY_LENGTH)) return { error: "Uma das opções está muito longa." };
+    return { options: cleaned };
+  }
+  return { options: [] };
+}
+
+function sanitizeStringList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .slice(0, MAX_LIST_ENTRIES)
+    .map((v) => v.slice(0, MAX_LIST_ENTRY_LENGTH));
+}
+
+/**
+ * metadata de Reunião — tipado e validado aqui, nunca confiando só no
+ * frontend (item 14/19 do pedido). Cada campo é opcional: a etapa de
+ * criação exige só o mínimo (ver validate/route.ts pros erros críticos),
+ * o resto pode ser preenchido depois.
+ */
+export function sanitizeMeetingMetadata(input: unknown): { metadata: Record<string, unknown> } | { error: string } {
+  if (input === undefined || input === null) return { metadata: {} };
+  if (typeof input !== "object") return { error: "Configuração da reunião inválida." };
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if (src.objective !== undefined) {
+    if (typeof src.objective !== "string") return { error: "Objetivo inválido." };
+    out.objective = src.objective.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.meetingType !== undefined) {
+    if (typeof src.meetingType !== "string" || !isValidMeetingType(src.meetingType)) return { error: "Tipo de reunião inválido." };
+    out.meetingType = src.meetingType;
+  }
+  if (src.durationValue !== undefined) {
+    if (src.durationValue !== null && (typeof src.durationValue !== "number" || src.durationValue < 0)) {
+      return { error: "Duração da reunião inválida." };
+    }
+    out.durationValue = src.durationValue;
+  }
+  if (src.durationUnit !== undefined) {
+    if (typeof src.durationUnit !== "string" || !isValidMeetingDurationUnit(src.durationUnit)) return { error: "Unidade de duração inválida." };
+    out.durationUnit = src.durationUnit;
+  }
+  if (src.format !== undefined) {
+    if (typeof src.format !== "string" || !isValidMeetingFormat(src.format)) return { error: "Formato da reunião inválido." };
+    out.format = src.format;
+  }
+  if (src.mainContactRole !== undefined) {
+    if (typeof src.mainContactRole !== "string") return { error: "Papel do contato principal inválido." };
+    out.mainContactRole = src.mainContactRole.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.internalParticipantRoles !== undefined) out.internalParticipantRoles = sanitizeStringList(src.internalParticipantRoles);
+  if (src.clientParticipants !== undefined) out.clientParticipants = sanitizeStringList(src.clientParticipants);
+  if (src.prerequisites !== undefined) out.prerequisites = sanitizeStringList(src.prerequisites);
+  if (src.requiredDocuments !== undefined) out.requiredDocuments = sanitizeStringList(src.requiredDocuments);
+  if (src.materialsToSend !== undefined) out.materialsToSend = sanitizeStringList(src.materialsToSend);
+  if (src.agenda !== undefined) out.agenda = sanitizeStringList(src.agenda);
+  if (src.keyQuestions !== undefined) out.keyQuestions = sanitizeStringList(src.keyQuestions);
+  if (src.participantsRequired !== undefined) out.participantsRequired = Boolean(src.participantsRequired);
+  if (src.recordRequired !== undefined) out.recordRequired = Boolean(src.recordRequired);
+  if (src.requiresMinutes !== undefined) out.requiresMinutes = Boolean(src.requiresMinutes);
+  if (src.expectedDecision !== undefined) {
+    if (typeof src.expectedDecision !== "string") return { error: "Decisão esperada inválida." };
+    out.expectedDecision = src.expectedDecision.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.associatedDeliverable !== undefined) {
+    if (typeof src.associatedDeliverable !== "string") return { error: "Entregável associado inválido." };
+    out.associatedDeliverable = src.associatedDeliverable.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.notes !== undefined) {
+    if (typeof src.notes !== "string") return { error: "Observações inválidas." };
+    out.notes = src.notes.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.rescheduleTolerance !== undefined) {
+    if (typeof src.rescheduleTolerance !== "string") return { error: "Tolerância de reagendamento inválida." };
+    out.rescheduleTolerance = src.rescheduleTolerance.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+
+  return { metadata: out };
+}
+
+/** metadata de Documento — mesmo raciocínio de sanitizeMeetingMetadata. */
+export function sanitizeDocumentMetadata(input: unknown): { metadata: Record<string, unknown> } | { error: string } {
+  if (input === undefined || input === null) return { metadata: {} };
+  if (typeof input !== "object") return { error: "Configuração do documento inválida." };
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if (src.documentKind !== undefined) {
+    if (typeof src.documentKind !== "string" || !isValidDocumentKind(src.documentKind)) return { error: "Tipo de documento inválido." };
+    out.documentKind = src.documentKind;
+  }
+  if (src.origin !== undefined) {
+    if (typeof src.origin !== "string" || !isValidDocumentOrigin(src.origin)) return { error: "Origem do documento inválida." };
+    out.origin = src.origin;
+  }
+  if (src.category !== undefined) {
+    if (typeof src.category !== "string" || !isValidDocumentCategory(src.category)) return { error: "Categoria do documento inválida." };
+    out.category = src.category;
+  }
+  if (src.visibility !== undefined) {
+    if (typeof src.visibility !== "string" || !isValidDocumentVisibility(src.visibility)) return { error: "Visibilidade do documento inválida." };
+    out.visibility = src.visibility;
+  }
+  if (src.templateFileNote !== undefined) {
+    if (typeof src.templateFileNote !== "string") return { error: "Nota de arquivo modelo inválida." };
+    out.templateFileNote = src.templateFileNote.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.resourceId !== undefined) {
+    if (src.resourceId !== null && typeof src.resourceId !== "string") return { error: "Recurso vinculado inválido." };
+    out.resourceId = src.resourceId;
+  }
+  if (src.requiresApproval !== undefined) out.requiresApproval = Boolean(src.requiresApproval);
+  if (src.acceptedFormats !== undefined) {
+    if (!Array.isArray(src.acceptedFormats)) return { error: "Formatos aceitos inválidos." };
+    const formats = src.acceptedFormats.filter((f): f is string => typeof f === "string");
+    if (formats.some((f) => !isValidDocumentFormat(f))) return { error: "Um dos formatos aceitos é inválido." };
+    out.acceptedFormats = formats;
+  }
+
+  return { metadata: out };
+}
+
+// "Ação em caso de atraso" do pedido pra Reunião/Checklist/Formulário/
+// Documento é o MESMO conjunto de OVERDUE_ACTIONS já usado pelos blocos da
+// Fase 2.1 — não precisa de lista nova.
 
 export const DUE_OFFSET_ANCHORS = [
   { id: "apos_inicio_etapa", label: "Após início da etapa" },

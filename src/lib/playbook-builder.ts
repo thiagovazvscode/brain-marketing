@@ -5,9 +5,16 @@
 // pro bundle do navegador. Tudo aqui só roda dentro de route handlers e do
 // Server Component da página do editor.
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { playbooks, playbookVersions, playbookStageTemplates, playbookBlockTemplates } from "@/db/schema";
+import {
+  playbooks,
+  playbookVersions,
+  playbookStageTemplates,
+  playbookBlockTemplates,
+  playbookChecklistItems,
+  playbookFormQuestions,
+} from "@/db/schema";
 import { bumpVersion, computeVersionTransition } from "@/lib/methods";
 
 /**
@@ -77,6 +84,41 @@ async function cloneStagesAndBlocks(sourceVersionId: string, targetVersionId: st
         })
         .returning();
       blockIdMap.set(block.id, newBlock.id);
+
+      // Itens de checklist / perguntas de formulário são filhos do bloco —
+      // clonam junto, com IDs novos, nunca compartilhados entre versões
+      // (regra do pedido).
+      if (block.checklistItems.length > 0) {
+        await db.insert(playbookChecklistItems).values(
+          block.checklistItems.map((item) => ({
+            blockId: newBlock.id,
+            title: item.title,
+            description: item.description,
+            groupName: item.groupName,
+            position: item.position,
+            isRequired: item.isRequired,
+            requiresEvidence: item.requiresEvidence,
+            allowsNotes: item.allowsNotes,
+            isActive: item.isActive,
+          }))
+        );
+      }
+      if (block.formQuestions.length > 0) {
+        await db.insert(playbookFormQuestions).values(
+          block.formQuestions.map((q) => ({
+            blockId: newBlock.id,
+            label: q.label,
+            helpText: q.helpText,
+            questionType: q.questionType,
+            placeholder: q.placeholder,
+            options: q.options,
+            validation: q.validation,
+            sectionName: q.sectionName,
+            position: q.position,
+            isRequired: q.isRequired,
+          }))
+        );
+      }
     }
 
     await Promise.all(
@@ -253,7 +295,12 @@ export async function loadBlockInStage(playbookId: string, versionId: string, st
   return { ...chain, block };
 }
 
-/** Todas as etapas de uma versão, com seus blocos, ordenados — usado pelo payload do editor e pela duplicação. */
+/**
+ * Todas as etapas de uma versão, com seus blocos (e, para Checklist/
+ * Formulário, os itens/perguntas filhas já carregados) — usado pelo payload
+ * do editor e pela duplicação. Um único round-trip pros filhos: busca por
+ * blockId IN (...) em vez de N+1 por bloco.
+ */
 export async function getStagesWithBlocks(versionId: string) {
   const [stages, blocks] = await Promise.all([
     db
@@ -268,12 +315,88 @@ export async function getStagesWithBlocks(versionId: string) {
       .orderBy(asc(playbookBlockTemplates.position)),
   ]);
 
-  const blocksByStage = new Map<string, typeof blocks>();
+  const blockIds = blocks.map((b) => b.id);
+  const [checklistItems, formQuestions] =
+    blockIds.length === 0
+      ? [[], []]
+      : await Promise.all([
+          db
+            .select()
+            .from(playbookChecklistItems)
+            .where(inArray(playbookChecklistItems.blockId, blockIds))
+            .orderBy(asc(playbookChecklistItems.position)),
+          db
+            .select()
+            .from(playbookFormQuestions)
+            .where(inArray(playbookFormQuestions.blockId, blockIds))
+            .orderBy(asc(playbookFormQuestions.position)),
+        ]);
+
+  const itemsByBlock = new Map<string, typeof checklistItems>();
+  for (const item of checklistItems) {
+    const list = itemsByBlock.get(item.blockId) ?? [];
+    list.push(item);
+    itemsByBlock.set(item.blockId, list);
+  }
+  const questionsByBlock = new Map<string, typeof formQuestions>();
+  for (const question of formQuestions) {
+    const list = questionsByBlock.get(question.blockId) ?? [];
+    list.push(question);
+    questionsByBlock.set(question.blockId, list);
+  }
+
+  const blocksByStage = new Map<string, (typeof blocks[number] & { checklistItems: typeof checklistItems; formQuestions: typeof formQuestions })[]>();
   for (const block of blocks) {
     const list = blocksByStage.get(block.stageId) ?? [];
-    list.push(block);
+    list.push({
+      ...block,
+      checklistItems: itemsByBlock.get(block.id) ?? [],
+      formQuestions: questionsByBlock.get(block.id) ?? [],
+    });
     blocksByStage.set(block.stageId, list);
   }
 
   return stages.map((stage) => ({ ...stage, blocks: blocksByStage.get(stage.id) ?? [] }));
+}
+
+/** Mesma cadeia de loadBlockInStage, uma camada abaixo (item pertence ao bloco certo). */
+export async function loadChecklistItemInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  itemId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [item] = await db
+    .select()
+    .from(playbookChecklistItems)
+    .where(and(eq(playbookChecklistItems.id, itemId), eq(playbookChecklistItems.blockId, blockId)))
+    .limit(1);
+  if (!item) return null;
+
+  return { ...chain, item };
+}
+
+/** Mesma cadeia, pra pergunta de formulário. */
+export async function loadFormQuestionInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  questionId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [question] = await db
+    .select()
+    .from(playbookFormQuestions)
+    .where(and(eq(playbookFormQuestions.id, questionId), eq(playbookFormQuestions.blockId, blockId)))
+    .limit(1);
+  if (!question) return null;
+
+  return { ...chain, question };
 }

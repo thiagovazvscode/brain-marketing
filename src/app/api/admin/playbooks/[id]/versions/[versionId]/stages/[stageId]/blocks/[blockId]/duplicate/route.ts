@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { playbookBlockTemplates } from "@/db/schema";
+import { playbookBlockTemplates, playbookChecklistItems, playbookFormQuestions } from "@/db/schema";
 import { loadBlockInStage } from "@/lib/playbook-builder";
 
 export async function POST(
@@ -54,6 +54,46 @@ export async function POST(
         tags: original.tags,
       })
       .returning();
+
+    // Checklist/Formulário: itens e perguntas são filhos do bloco, clonam
+    // junto com IDs novos — nunca compartilhados entre o original e a cópia.
+    if (original.type === "checklist") {
+      const items = await db.select().from(playbookChecklistItems).where(eq(playbookChecklistItems.blockId, blockId)).orderBy(asc(playbookChecklistItems.position));
+      if (items.length > 0) {
+        await db.insert(playbookChecklistItems).values(
+          items.map((item) => ({
+            blockId: copy.id,
+            title: item.title,
+            description: item.description,
+            groupName: item.groupName,
+            position: item.position,
+            isRequired: item.isRequired,
+            requiresEvidence: item.requiresEvidence,
+            allowsNotes: item.allowsNotes,
+            isActive: item.isActive,
+          }))
+        );
+      }
+    }
+    if (original.type === "form_briefing") {
+      const questions = await db.select().from(playbookFormQuestions).where(eq(playbookFormQuestions.blockId, blockId)).orderBy(asc(playbookFormQuestions.position));
+      if (questions.length > 0) {
+        await db.insert(playbookFormQuestions).values(
+          questions.map((q) => ({
+            blockId: copy.id,
+            label: q.label,
+            helpText: q.helpText,
+            questionType: q.questionType,
+            placeholder: q.placeholder,
+            options: q.options,
+            validation: q.validation,
+            sectionName: q.sectionName,
+            position: q.position,
+            isRequired: q.isRequired,
+          }))
+        );
+      }
+    }
 
     const originalIndex = currentOrder.findIndex((b) => b.id === blockId);
     const newOrder = [...currentOrder];

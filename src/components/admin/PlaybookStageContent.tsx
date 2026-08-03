@@ -1,16 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import { GripVertical, MoreVertical, Plus, Send, ClipboardList, Lock } from "lucide-react";
-import type { PlaybookStageRow, PlaybookBlockRow, SimpleOption } from "@/types/methods";
-import { durationUnitLabel, playbookAssigneeRoleLabel, playbookBlockPriorityLabel, playbookBlockTypeLabel } from "@/lib/methods";
+import { useEffect, useRef, useState } from "react";
+import type { FocusHint } from "@/components/admin/PlaybookConfigPanel";
+import { ArrowLeft, GripVertical, MoreVertical, Plus, Send, ClipboardList, Lock, Users, FileText, Upload } from "lucide-react";
+import type { PlaybookChecklistItemRow, PlaybookFormQuestionRow, PlaybookStageRow, PlaybookBlockRow, SimpleOption } from "@/types/methods";
+import {
+  documentKindLabel,
+  documentOriginLabel,
+  durationUnitLabel,
+  formRespondentTypeLabel,
+  meetingDurationUnitLabel,
+  meetingFormatLabel,
+  playbookAssigneeRoleLabel,
+  playbookBlockPriorityLabel,
+  playbookBlockTypeLabel,
+} from "@/lib/methods";
 import { EmptyBlocksPlaceholder } from "@/components/admin/EmptyBlocksPlaceholder";
+import { ChecklistBuilder } from "@/components/admin/blocks/ChecklistBuilder";
+import { FormBuilder } from "@/components/admin/blocks/FormBuilder";
 
-// Roxo (tarefa interna) e azul (solicitação ao cliente) — cor reservada só
-// pra diferenciar tipo. Verde (os-accent) fica exclusivo de seleção/sucesso.
+// Cor discreta por tipo — só em ícone/badge/marca lateral (regra do pedido:
+// verde da Brain fica exclusivo de seleção/sucesso).
 const TYPE_STYLE: Record<string, { badge: string; chip: string }> = {
   internal_task: { badge: "bg-violet-100 text-violet-700", chip: "bg-violet-100 text-violet-600" },
   client_request: { badge: "bg-blue-100 text-blue-700", chip: "bg-blue-100 text-blue-600" },
+  checklist: { badge: "bg-teal-100 text-teal-700", chip: "bg-teal-100 text-teal-600" },
+  meeting: { badge: "bg-orange-100 text-orange-700", chip: "bg-orange-100 text-orange-600" },
+  form_briefing: { badge: "bg-pink-100 text-pink-700", chip: "bg-pink-100 text-pink-600" },
+  document: { badge: "bg-slate-100 text-slate-700", chip: "bg-slate-100 text-slate-600" },
+};
+
+const TYPE_ICON: Record<string, typeof ClipboardList> = {
+  internal_task: ClipboardList,
+  client_request: Send,
+  checklist: ClipboardList,
+  meeting: Users,
+  form_briefing: FileText,
+  document: Upload,
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -19,6 +45,59 @@ const PRIORITY_DOT: Record<string, string> = {
   alta: "text-amber-600",
   critica: "text-red-600",
 };
+
+/**
+ * Destaque temporário (2s) do construtor de itens/perguntas quando a
+ * Validação aponta um problema em "checklist.items"/"form.questions" — esses
+ * campos não moram no painel de configuração (coluna direita), moram aqui no
+ * centro, então quem escuta o focusHint é este componente, não o painel.
+ */
+function useBuilderFocus(ref: React.RefObject<HTMLElement | null>, active: boolean, nonce: number | undefined) {
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add("ring-2", "ring-os-accent", "ring-offset-2");
+    const timer = setTimeout(() => el.classList.remove("ring-2", "ring-os-accent", "ring-offset-2"), 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, nonce]);
+}
+
+/** Resumo específico por tipo (item 10 do pedido) — cada tipo mostra o que importa dele, não um due-offset genérico que não se aplica. */
+function typeSummary(block: PlaybookBlockRow): string {
+  const meta = block.metadata ?? {};
+  if (block.type === "meeting") {
+    const parts: string[] = [];
+    if (meta.format) parts.push(meetingFormatLabel(meta.format as string));
+    if (meta.durationValue != null) parts.push(`${meta.durationValue} ${meetingDurationUnitLabel((meta.durationUnit as string) ?? "minutos")}`);
+    const participantCount = ((meta.internalParticipantRoles as string[]) ?? []).length + ((meta.clientParticipants as string[]) ?? []).length;
+    if (participantCount > 0) parts.push(`${participantCount} participantes`);
+    return parts.length > 0 ? ` • ${parts.join(" • ")}` : "";
+  }
+  if (block.type === "checklist") {
+    const required = block.checklistItems.filter((i) => i.isRequired).length;
+    return ` • ${block.checklistItems.length} itens • ${required} obrigatórios`;
+  }
+  if (block.type === "form_briefing") {
+    const required = block.formQuestions.filter((q) => q.isRequired).length;
+    const respondent = meta.respondentType ? formRespondentTypeLabel(meta.respondentType as string) : null;
+    return ` • ${block.formQuestions.length} perguntas • ${required} obrigatórias${respondent ? ` • ${respondent}` : ""}`;
+  }
+  if (block.type === "document") {
+    const parts: string[] = [];
+    if (meta.documentKind) parts.push(documentKindLabel(meta.documentKind as string));
+    if (meta.origin) parts.push(documentOriginLabel(meta.origin as string));
+    const formats = (meta.acceptedFormats as string[]) ?? [];
+    if (formats.length > 0) parts.push(formats.map((f) => f.toUpperCase()).join(", "));
+    return parts.length > 0 ? ` • ${parts.join(" • ")}` : "";
+  }
+  if (block.dueOffsetValue != null) {
+    return ` • ${block.dueOffsetValue} ${durationUnitLabel(block.dueOffsetUnit)}`;
+  }
+  return "";
+}
 
 function BlockRow({
   block,
@@ -40,7 +119,7 @@ function BlockRow({
   dragProps: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const Icon = block.type === "client_request" ? Send : ClipboardList;
+  const Icon = TYPE_ICON[block.type] ?? ClipboardList;
   const style = TYPE_STYLE[block.type] ?? { badge: "bg-os-bg text-os-muted", chip: "bg-os-bg text-os-muted" };
 
   return (
@@ -104,12 +183,7 @@ function BlockRow({
       <p className="truncate pl-[3.75rem] text-[11px] text-os-muted">
         {playbookBlockTypeLabel(block.type)}
         {assigneeLabel && <> • {assigneeLabel}</>}
-        {block.dueOffsetValue != null && (
-          <>
-            {" "}
-            • {block.dueOffsetValue} {durationUnitLabel(block.dueOffsetUnit)}
-          </>
-        )}
+        {typeSummary(block)}
       </p>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-[3.75rem] text-[10px] font-bold">
@@ -137,24 +211,56 @@ export function PlaybookStageContent({
   stage,
   totalStages,
   selectedBlockId,
+  selectedBlock,
   assigneeOptions,
   onSelectBlock,
   onAddBlock,
   onDuplicateBlock,
   onDeleteBlock,
   onReorderBlocks,
+  onCreateChecklistItem,
+  onUpdateChecklistItem,
+  onDeleteChecklistItem,
+  onDuplicateChecklistItem,
+  onReorderChecklistItems,
+  onCreateQuestion,
+  onUpdateQuestion,
+  onDeleteQuestion,
+  onDuplicateQuestion,
+  onReorderQuestions,
+  formQuestionError,
+  onBack,
+  focusHint,
 }: {
   stage: PlaybookStageRow | null;
   totalStages: number;
   selectedBlockId: string | null;
+  selectedBlock: PlaybookBlockRow | null;
   assigneeOptions: SimpleOption[];
   onSelectBlock: (blockId: string) => void;
   onAddBlock: () => void;
   onDuplicateBlock: (blockId: string) => void;
   onDeleteBlock: (blockId: string) => void;
   onReorderBlocks: (orderedIds: string[]) => void;
+  onCreateChecklistItem: (blockId: string) => void;
+  onUpdateChecklistItem: (blockId: string, itemId: string, patch: Partial<PlaybookChecklistItemRow>) => void;
+  onDeleteChecklistItem: (blockId: string, itemId: string) => void;
+  onDuplicateChecklistItem: (blockId: string, item: PlaybookChecklistItemRow) => void;
+  onReorderChecklistItems: (blockId: string, orderedIds: string[]) => void;
+  onCreateQuestion: (blockId: string) => void;
+  onUpdateQuestion: (blockId: string, questionId: string, patch: Partial<PlaybookFormQuestionRow>) => void;
+  onDeleteQuestion: (blockId: string, questionId: string) => void;
+  onDuplicateQuestion: (blockId: string, question: PlaybookFormQuestionRow) => void;
+  onReorderQuestions: (blockId: string, orderedIds: string[]) => void;
+  formQuestionError?: string | null;
+  onBack: () => void;
+  focusHint?: FocusHint | null;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const checklistRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  useBuilderFocus(checklistRef, focusHint?.field === "checklist.items", focusHint?.nonce);
+  useBuilderFocus(formRef, focusHint?.field === "form.questions", focusHint?.nonce);
 
   if (!stage) {
     return (
@@ -186,6 +292,45 @@ export function PlaybookStageContent({
       return block.defaultAssigneeRole ? playbookAssigneeRoleLabel(block.defaultAssigneeRole) : null;
     }
     return "A definir ao aplicar";
+  }
+
+  // Checklist/Formulário selecionado: o centro vira o construtor de itens/
+  // perguntas (item 11 do pedido — "centro: itens; direita: config geral"),
+  // não a lista de blocos. "← Voltar" desseleciona pra reaparecer a lista.
+  if (selectedBlock?.type === "checklist") {
+    return (
+      <div ref={checklistRef} className="min-w-0 flex-1 space-y-3 rounded-2xl">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs font-bold text-os-muted hover:text-os-ink">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para blocos
+        </button>
+        <ChecklistBuilder
+          items={selectedBlock.checklistItems}
+          onCreate={() => onCreateChecklistItem(selectedBlock.id)}
+          onUpdate={(itemId, patch) => onUpdateChecklistItem(selectedBlock.id, itemId, patch)}
+          onDelete={(itemId) => onDeleteChecklistItem(selectedBlock.id, itemId)}
+          onDuplicate={(item) => onDuplicateChecklistItem(selectedBlock.id, item)}
+          onReorder={(orderedIds) => onReorderChecklistItems(selectedBlock.id, orderedIds)}
+        />
+      </div>
+    );
+  }
+  if (selectedBlock?.type === "form_briefing") {
+    return (
+      <div ref={formRef} className="min-w-0 flex-1 space-y-3 rounded-2xl">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs font-bold text-os-muted hover:text-os-ink">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para blocos
+        </button>
+        <FormBuilder
+          questions={selectedBlock.formQuestions}
+          onCreate={() => onCreateQuestion(selectedBlock.id)}
+          onUpdate={(questionId, patch) => onUpdateQuestion(selectedBlock.id, questionId, patch)}
+          onDelete={(questionId) => onDeleteQuestion(selectedBlock.id, questionId)}
+          onDuplicate={(question) => onDuplicateQuestion(selectedBlock.id, question)}
+          onReorder={(orderedIds) => onReorderQuestions(selectedBlock.id, orderedIds)}
+          error={formQuestionError}
+        />
+      </div>
+    );
   }
 
   return (

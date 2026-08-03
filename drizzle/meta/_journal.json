@@ -57,6 +57,13 @@
       "when": 1785682131924,
       "tag": "0007_yellow_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785686258842,
+      "tag": "0008_modern_alice",
+      "breakpoints": true
     }
   ]
 }

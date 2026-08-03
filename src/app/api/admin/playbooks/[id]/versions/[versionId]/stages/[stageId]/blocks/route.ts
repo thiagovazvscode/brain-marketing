@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { playbookBlockTemplates } from "@/db/schema";
+import { playbookBlockTemplates, resources } from "@/db/schema";
 import { loadStageInVersion } from "@/lib/playbook-builder";
 import {
   isActivePlaybookBlockType,
@@ -12,6 +12,8 @@ import {
   isValidPlaybookBlockAssigneeType,
   isValidPlaybookBlockPriority,
   isValidPlaybookBlockType,
+  sanitizeDocumentMetadata,
+  sanitizeMeetingMetadata,
 } from "@/lib/methods";
 
 interface BlockBody {
@@ -34,7 +36,26 @@ interface BlockBody {
   completionCriteria?: string;
   overdueAction?: string | null;
   clientExpectedResponse?: string;
+  metadata?: Record<string, unknown>;
   tags?: string[];
+}
+
+/** meeting/document guardam config em metadata; outros tipos não usam. */
+async function resolveMetadata(type: string, raw: Record<string, unknown> | undefined): Promise<{ metadata: Record<string, unknown> | null } | { error: string }> {
+  if (type === "meeting") {
+    const result = sanitizeMeetingMetadata(raw);
+    return "error" in result ? result : { metadata: result.metadata };
+  }
+  if (type === "document") {
+    const result = sanitizeDocumentMetadata(raw);
+    if ("error" in result) return result;
+    if (result.metadata.resourceId) {
+      const [resource] = await db.select({ id: resources.id }).from(resources).where(eq(resources.id, result.metadata.resourceId as string)).limit(1);
+      if (!resource) return { error: "Recurso vinculado não encontrado." };
+    }
+    return { metadata: result.metadata };
+  }
+  return { metadata: null };
 }
 
 function validateFields(body: Partial<BlockBody>): string | null {
@@ -71,6 +92,9 @@ export async function POST(
   }
   const fieldError = validateFields(body);
   if (fieldError) return NextResponse.json({ error: fieldError }, { status: 400 });
+
+  const metadataResult = await resolveMetadata(body.type, body.metadata);
+  if ("error" in metadataResult) return NextResponse.json({ error: metadataResult.error }, { status: 400 });
 
   try {
     const chain = await loadStageInVersion(id, versionId, stageId);
@@ -123,6 +147,7 @@ export async function POST(
         completionCriteria: body.completionCriteria?.trim() || null,
         overdueAction: body.overdueAction || null,
         clientExpectedResponse: body.clientExpectedResponse?.trim() || null,
+        metadata: metadataResult.metadata,
         tags: body.tags?.filter(Boolean) ?? [],
       })
       .returning();
