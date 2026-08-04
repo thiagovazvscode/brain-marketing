@@ -5,7 +5,7 @@
 // pro bundle do navegador. Tudo aqui só roda dentro de route handlers e do
 // Server Component da página do editor.
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   playbooks,
@@ -14,6 +14,8 @@ import {
   playbookBlockTemplates,
   playbookChecklistItems,
   playbookFormQuestions,
+  playbookAnalysisDimensions,
+  playbookAnalysisCriteria,
 } from "@/db/schema";
 import { bumpVersion, computeVersionTransition } from "@/lib/methods";
 
@@ -118,6 +120,41 @@ async function cloneStagesAndBlocks(sourceVersionId: string, targetVersionId: st
             isRequired: q.isRequired,
           }))
         );
+      }
+      // Dimensões (e, por dimensão, os critérios) de um bloco Análise —
+      // mesmo raciocínio de checklistItems/formQuestions: IDs novos, nunca
+      // compartilhados entre versões (item 8 do pedido da Fase 2.2B.1).
+      for (const dimension of block.analysisDimensions) {
+        const [newDimension] = await db
+          .insert(playbookAnalysisDimensions)
+          .values({
+            blockId: newBlock.id,
+            name: dimension.name,
+            description: dimension.description,
+            weight: dimension.weight,
+            position: dimension.position,
+            isActive: dimension.isActive,
+          })
+          .returning();
+
+        if (dimension.criteria.length > 0) {
+          await db.insert(playbookAnalysisCriteria).values(
+            dimension.criteria.map((c) => ({
+              dimensionId: newDimension.id,
+              name: c.name,
+              description: c.description,
+              evaluationType: c.evaluationType,
+              weight: c.weight,
+              isRequired: c.isRequired,
+              requiresEvidence: c.requiresEvidence,
+              evidenceDescription: c.evidenceDescription,
+              guidance: c.guidance,
+              options: c.options,
+              position: c.position,
+              isActive: c.isActive,
+            }))
+          );
+        }
       }
     }
 
@@ -316,9 +353,9 @@ export async function getStagesWithBlocks(versionId: string) {
   ]);
 
   const blockIds = blocks.map((b) => b.id);
-  const [checklistItems, formQuestions] =
+  const [checklistItems, formQuestions, dimensions] =
     blockIds.length === 0
-      ? [[], []]
+      ? [[], [], []]
       : await Promise.all([
           db
             .select()
@@ -330,7 +367,22 @@ export async function getStagesWithBlocks(versionId: string) {
             .from(playbookFormQuestions)
             .where(inArray(playbookFormQuestions.blockId, blockIds))
             .orderBy(asc(playbookFormQuestions.position)),
+          db
+            .select()
+            .from(playbookAnalysisDimensions)
+            .where(inArray(playbookAnalysisDimensions.blockId, blockIds))
+            .orderBy(asc(playbookAnalysisDimensions.position)),
         ]);
+
+  const dimensionIds = dimensions.map((d) => d.id);
+  const criteria =
+    dimensionIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(playbookAnalysisCriteria)
+          .where(inArray(playbookAnalysisCriteria.dimensionId, dimensionIds))
+          .orderBy(asc(playbookAnalysisCriteria.position));
 
   const itemsByBlock = new Map<string, typeof checklistItems>();
   for (const item of checklistItems) {
@@ -344,14 +396,34 @@ export async function getStagesWithBlocks(versionId: string) {
     list.push(question);
     questionsByBlock.set(question.blockId, list);
   }
+  const criteriaByDimension = new Map<string, typeof criteria>();
+  for (const criterion of criteria) {
+    const list = criteriaByDimension.get(criterion.dimensionId) ?? [];
+    list.push(criterion);
+    criteriaByDimension.set(criterion.dimensionId, list);
+  }
+  const dimensionsByBlock = new Map<string, (typeof dimensions[number] & { criteria: typeof criteria })[]>();
+  for (const dimension of dimensions) {
+    const list = dimensionsByBlock.get(dimension.blockId) ?? [];
+    list.push({ ...dimension, criteria: criteriaByDimension.get(dimension.id) ?? [] });
+    dimensionsByBlock.set(dimension.blockId, list);
+  }
 
-  const blocksByStage = new Map<string, (typeof blocks[number] & { checklistItems: typeof checklistItems; formQuestions: typeof formQuestions })[]>();
+  const blocksByStage = new Map<
+    string,
+    (typeof blocks[number] & {
+      checklistItems: typeof checklistItems;
+      formQuestions: typeof formQuestions;
+      analysisDimensions: (typeof dimensions[number] & { criteria: typeof criteria })[];
+    })[]
+  >();
   for (const block of blocks) {
     const list = blocksByStage.get(block.stageId) ?? [];
     list.push({
       ...block,
       checklistItems: itemsByBlock.get(block.id) ?? [],
       formQuestions: questionsByBlock.get(block.id) ?? [],
+      analysisDimensions: dimensionsByBlock.get(block.id) ?? [],
     });
     blocksByStage.set(block.stageId, list);
   }
@@ -399,4 +471,82 @@ export async function loadFormQuestionInBlock(
   if (!question) return null;
 
   return { ...chain, question };
+}
+
+/** Mesma cadeia, pra dimensão de Análise (item 7 do pedido — nunca alterar por dimensionId isolado). */
+export async function loadDimensionInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  dimensionId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [dimension] = await db
+    .select()
+    .from(playbookAnalysisDimensions)
+    .where(and(eq(playbookAnalysisDimensions.id, dimensionId), eq(playbookAnalysisDimensions.blockId, blockId)))
+    .limit(1);
+  if (!dimension) return null;
+
+  return { ...chain, dimension };
+}
+
+/** Uma camada abaixo de loadDimensionInBlock — critério pertence à dimensão certa, que pertence ao bloco certo. */
+export async function loadCriterionInDimension(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  dimensionId: string,
+  criterionId: string
+) {
+  const chain = await loadDimensionInBlock(playbookId, versionId, stageId, blockId, dimensionId);
+  if (!chain) return null;
+
+  const [criterion] = await db
+    .select()
+    .from(playbookAnalysisCriteria)
+    .where(and(eq(playbookAnalysisCriteria.id, criterionId), eq(playbookAnalysisCriteria.dimensionId, dimensionId)))
+    .limit(1);
+  if (!criterion) return null;
+
+  return { ...chain, criterion };
+}
+
+/** Próxima posição livre entre as dimensões do bloco — nunca confia só no DEFAULT 0 da coluna (item 4 do pedido). */
+export async function getNextAnalysisDimensionPosition(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ maxPosition: sql<number | null>`max(${playbookAnalysisDimensions.position})` })
+    .from(playbookAnalysisDimensions)
+    .where(eq(playbookAnalysisDimensions.blockId, blockId));
+  return (row?.maxPosition ?? -1) + 1;
+}
+
+/** Mesma lógica, pra critérios dentro de uma dimensão. */
+export async function getNextAnalysisCriterionPosition(dimensionId: string): Promise<number> {
+  const [row] = await db
+    .select({ maxPosition: sql<number | null>`max(${playbookAnalysisCriteria.position})` })
+    .from(playbookAnalysisCriteria)
+    .where(eq(playbookAnalysisCriteria.dimensionId, dimensionId));
+  return (row?.maxPosition ?? -1) + 1;
+}
+
+/** Contagem de dimensões do bloco / critérios da dimensão — pra aplicar os limites defensivos antes do insert. */
+export async function countAnalysisDimensions(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playbookAnalysisDimensions)
+    .where(eq(playbookAnalysisDimensions.blockId, blockId));
+  return Number(row?.count ?? 0);
+}
+
+export async function countAnalysisCriteria(dimensionId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playbookAnalysisCriteria)
+    .where(eq(playbookAnalysisCriteria.dimensionId, dimensionId));
+  return Number(row?.count ?? 0);
 }

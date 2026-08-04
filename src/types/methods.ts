@@ -184,6 +184,79 @@ export interface FormQuestionValidation {
   allowedFormats?: string[];
 }
 
+// ── Fase 2.2B.1 — Análise ───────────────────────────────────────────────
+// Fonte vinculada dentro de metadata.sources (array — não tabela própria,
+// mesmo raciocínio de agenda/prerequisites da Reunião: sem ID/edição/
+// reordenação independentes fora do bloco, "posição" é o índice no array).
+export interface AnalysisSourceLink {
+  // Tipo do vínculo — blocos existentes do playbook (referenciados por
+  // sourceBlockId) ou fontes fora do modelo (recurso da biblioteca por
+  // resourceId, ou texto livre em "personalizada").
+  type: "meeting" | "checklist" | "form_briefing" | "document" | "internal_task" | "client_request" | "resource" | "personalizada";
+  sourceBlockId?: string | null;
+  resourceId?: string | null;
+  label: string;
+  required: boolean;
+  purpose?: string;
+}
+
+export interface AnalysisBlockMetadata {
+  analysisType?: string;
+  objective?: string;
+  method?: string;
+  analyzedPeriod?: string;
+  requiresEvidence?: boolean;
+  useWeights?: boolean;
+  scoringSystem?: string;
+  methodologyNotes?: string;
+  collaborators?: string[];
+  sources?: AnalysisSourceLink[];
+  synthesisRequired?: boolean;
+  recommendationsRequired?: boolean;
+  mainProblems?: string[];
+  strengths?: string[];
+  risks?: string[];
+  opportunities?: string[];
+  recommendations?: string[];
+  priorities?: string[];
+  attachedEvidence?: string[];
+  relatedDeliverable?: string;
+  finalNotes?: string;
+  allowPartialAnalysis?: boolean;
+  requiresInternalReview?: boolean;
+}
+
+export interface PlaybookAnalysisCriterionRow {
+  id: string;
+  dimensionId: string;
+  name: string;
+  description: string | null;
+  evaluationType: string;
+  weight: number | null;
+  isRequired: boolean;
+  requiresEvidence: boolean;
+  evidenceDescription: string | null;
+  guidance: string | null;
+  options: string[];
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlaybookAnalysisDimensionRow {
+  id: string;
+  blockId: string;
+  name: string;
+  description: string | null;
+  weight: number | null;
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  criteria: PlaybookAnalysisCriterionRow[];
+}
+
 export interface PlaybookChecklistItemRow {
   id: string;
   blockId: string;
@@ -246,6 +319,7 @@ export interface PlaybookBlockRow {
   tags: string[];
   checklistItems: PlaybookChecklistItemRow[];
   formQuestions: PlaybookFormQuestionRow[];
+  analysisDimensions: PlaybookAnalysisDimensionRow[];
   createdAt: string;
   updatedAt: string;
 }
@@ -300,6 +374,11 @@ export interface ValidationIssue {
   scope: "playbook" | "etapa" | "bloco";
   stageId?: string;
   blockId?: string;
+  // Só para problemas de dimensão/critério de um bloco Análise — usados
+  // junto com blockId/field/code/severity na chave de dedup e na
+  // navegação (expandir a dimensão/critério certo ao clicar no problema).
+  dimensionId?: string;
+  criterionId?: string;
   message: string;
   // Chave estável (não a mensagem, que é texto livre) usada só pelo client
   // pra abrir a seção certa do painel e focar o campo problemático ao

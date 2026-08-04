@@ -1,5 +1,6 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, date, numeric, uniqueIndex, index, check } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const leadStatusEnum = pgEnum("lead_status", ["novo", "contatado", "fechado", "perdido"]);
 export const leadSourceEnum = pgEnum("lead_source", ["banner", "quiz-cta", "homepage-contact"]);
@@ -803,3 +804,85 @@ export const playbookFormQuestions = pgTable("playbook_form_questions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Tipos de avaliação de um critério de Análise (Fase 2.2B.1) — conjunto
+// fixo e pequeno vindo explícito do pedido (8 valores), mesmo raciocínio de
+// playbookBlockPriorityEnum/durationUnitEnum: enum do banco, não texto
+// validado em app. "analysisType" (Diagnóstico/Auditoria/...) e os campos
+// de metodologia/fontes/conclusões NÃO entram aqui — ficam em
+// playbook_block_templates.metadata, mesmo padrão de Reunião/Documento
+// (sanitizeAnalysisMetadata em lib/methods.ts), porque são texto validado
+// em app (listas que tendem a crescer) e/ou não precisam de ID próprio.
+export const analysisEvaluationTypeEnum = pgEnum("analysis_evaluation_type", [
+  "texto_livre",
+  "sim_nao",
+  "nota_0_5",
+  "nota_0_10",
+  "percentual",
+  "classificacao",
+  "numero",
+  "moeda",
+]);
+
+// Dimensão de um bloco Análise (Fase 2.2B.1). blockId em cascade — mesmo
+// raciocínio de playbookChecklistItems/playbookFormQuestions: apagar o
+// bloco apaga as dimensões (e, por tabela, os critérios) junto.
+// Índice composto (block_id, position): Postgres não cria índice automático
+// pra coluna de FK, e toda listagem/reorder/validação/preview/duplicação
+// consulta "dimensões do bloco X, em ordem" — o prefixo (block_id) sozinho
+// já cobre também as buscas só por bloco, sem precisar de índice separado.
+export const playbookAnalysisDimensions = pgTable(
+  "playbook_analysis_dimensions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    // 0-100, nullable — "usar pesos" é opcional (metadata.useWeights); peso
+    // sem uso ativado fica sem validação de soma, só ausente/livre. Soma
+    // total != 100% é aviso de app (não bloqueante); fora de 0-100 é sempre
+    // inválido, por isso vira CHECK de banco.
+    weight: integer("weight"),
+    position: integer("position").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("playbook_analysis_dimensions_block_position_idx").on(table.blockId, table.position),
+    check("playbook_analysis_dimensions_weight_range", sql`${table.weight} is null or (${table.weight} >= 0 and ${table.weight} <= 100)`),
+    check("playbook_analysis_dimensions_position_non_negative", sql`${table.position} >= 0`),
+  ]
+);
+
+// Critério de uma dimensão (Fase 2.2B.1). dimensionId em cascade — excluir
+// a dimensão exclui os critérios; excluir o bloco (cascade acima) chega
+// até aqui transitivamente via dimensionId → blockId. Mesmo raciocínio de
+// índice composto (dimension_id, position) da tabela de dimensões acima.
+export const playbookAnalysisCriteria = pgTable(
+  "playbook_analysis_criteria",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dimensionId: uuid("dimension_id").notNull().references(() => playbookAnalysisDimensions.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    evaluationType: analysisEvaluationTypeEnum("evaluation_type").notNull().default("texto_livre"),
+    weight: integer("weight"),
+    isRequired: boolean("is_required").notNull().default(true),
+    requiresEvidence: boolean("requires_evidence").notNull().default(false),
+    evidenceDescription: text("evidence_description"),
+    guidance: text("guidance"),
+    // Só relevante pra evaluationType "classificacao" (≤ 50 itens, validado
+    // em app) — mesmo raciocínio de playbookFormQuestions.options.
+    options: jsonb("options").$type<string[]>().notNull().default([]),
+    position: integer("position").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("playbook_analysis_criteria_dimension_position_idx").on(table.dimensionId, table.position),
+    check("playbook_analysis_criteria_weight_range", sql`${table.weight} is null or (${table.weight} >= 0 and ${table.weight} <= 100)`),
+    check("playbook_analysis_criteria_position_non_negative", sql`${table.position} >= 0`),
+  ]
+);

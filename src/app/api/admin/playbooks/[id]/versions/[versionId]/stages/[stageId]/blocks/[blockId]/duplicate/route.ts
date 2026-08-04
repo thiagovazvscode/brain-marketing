@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { playbookBlockTemplates, playbookChecklistItems, playbookFormQuestions } from "@/db/schema";
+import { playbookBlockTemplates, playbookChecklistItems, playbookFormQuestions, playbookAnalysisDimensions, playbookAnalysisCriteria } from "@/db/schema";
 import { loadBlockInStage } from "@/lib/playbook-builder";
 
 export async function POST(
@@ -92,6 +92,54 @@ export async function POST(
             isRequired: q.isRequired,
           }))
         );
+      }
+    }
+
+    // Análise: dimensões (e, por dimensão, os critérios) são filhas do
+    // bloco, clonam junto com IDs novos — mesmo raciocínio de checklist/
+    // formulário acima.
+    if (original.type === "analysis") {
+      const dimensions = await db
+        .select()
+        .from(playbookAnalysisDimensions)
+        .where(eq(playbookAnalysisDimensions.blockId, blockId))
+        .orderBy(asc(playbookAnalysisDimensions.position));
+      for (const dimension of dimensions) {
+        const [newDimension] = await db
+          .insert(playbookAnalysisDimensions)
+          .values({
+            blockId: copy.id,
+            name: dimension.name,
+            description: dimension.description,
+            weight: dimension.weight,
+            position: dimension.position,
+            isActive: dimension.isActive,
+          })
+          .returning();
+
+        const criteria = await db
+          .select()
+          .from(playbookAnalysisCriteria)
+          .where(eq(playbookAnalysisCriteria.dimensionId, dimension.id))
+          .orderBy(asc(playbookAnalysisCriteria.position));
+        if (criteria.length > 0) {
+          await db.insert(playbookAnalysisCriteria).values(
+            criteria.map((c) => ({
+              dimensionId: newDimension.id,
+              name: c.name,
+              description: c.description,
+              evaluationType: c.evaluationType,
+              weight: c.weight,
+              isRequired: c.isRequired,
+              requiresEvidence: c.requiresEvidence,
+              evidenceDescription: c.evidenceDescription,
+              guidance: c.guidance,
+              options: c.options,
+              position: c.position,
+              isActive: c.isActive,
+            }))
+          );
+        }
       }
     }
 

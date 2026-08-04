@@ -2,8 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FocusHint } from "@/components/admin/PlaybookConfigPanel";
-import { ArrowLeft, GripVertical, MoreVertical, Plus, Send, ClipboardList, Lock, Users, FileText, Upload } from "lucide-react";
-import type { PlaybookChecklistItemRow, PlaybookFormQuestionRow, PlaybookStageRow, PlaybookBlockRow, SimpleOption } from "@/types/methods";
+import { ArrowLeft, BarChart3, GripVertical, MoreVertical, Plus, Send, ClipboardList, Lock, Users, FileText, Upload } from "lucide-react";
+import type {
+  PlaybookAnalysisCriterionRow,
+  PlaybookAnalysisDimensionRow,
+  PlaybookChecklistItemRow,
+  PlaybookFormQuestionRow,
+  PlaybookStageRow,
+  PlaybookBlockRow,
+  PlaybookResourceOption,
+  SimpleOption,
+} from "@/types/methods";
 import {
   documentKindLabel,
   documentOriginLabel,
@@ -18,6 +27,7 @@ import {
 import { EmptyBlocksPlaceholder } from "@/components/admin/EmptyBlocksPlaceholder";
 import { ChecklistBuilder } from "@/components/admin/blocks/ChecklistBuilder";
 import { FormBuilder } from "@/components/admin/blocks/FormBuilder";
+import { AnalysisBuilder } from "@/components/admin/blocks/AnalysisBuilder";
 
 // Cor discreta por tipo — só em ícone/badge/marca lateral (regra do pedido:
 // verde da Brain fica exclusivo de seleção/sucesso).
@@ -28,6 +38,9 @@ const TYPE_STYLE: Record<string, { badge: string; chip: string }> = {
   meeting: { badge: "bg-orange-100 text-orange-700", chip: "bg-orange-100 text-orange-600" },
   form_briefing: { badge: "bg-pink-100 text-pink-700", chip: "bg-pink-100 text-pink-600" },
   document: { badge: "bg-slate-100 text-slate-700", chip: "bg-slate-100 text-slate-600" },
+  // Azul-violeta (indigo) discreto — item 1/13 do pedido: nunca usar o verde
+  // Brain (reservado a seleção/sucesso) como cor de tipo.
+  analysis: { badge: "bg-indigo-100 text-indigo-700", chip: "bg-indigo-100 text-indigo-600" },
 };
 
 const TYPE_ICON: Record<string, typeof ClipboardList> = {
@@ -37,6 +50,7 @@ const TYPE_ICON: Record<string, typeof ClipboardList> = {
   meeting: Users,
   form_briefing: FileText,
   document: Upload,
+  analysis: BarChart3,
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -84,6 +98,10 @@ function typeSummary(block: PlaybookBlockRow): string {
     const required = block.formQuestions.filter((q) => q.isRequired).length;
     const respondent = meta.respondentType ? formRespondentTypeLabel(meta.respondentType as string) : null;
     return ` • ${block.formQuestions.length} perguntas • ${required} obrigatórias${respondent ? ` • ${respondent}` : ""}`;
+  }
+  if (block.type === "analysis") {
+    const criteriaCount = block.analysisDimensions.reduce((sum, d) => sum + d.criteria.length, 0);
+    return ` • ${block.analysisDimensions.length} ${block.analysisDimensions.length === 1 ? "dimensão" : "dimensões"} • ${criteriaCount} ${criteriaCount === 1 ? "critério" : "critérios"}`;
   }
   if (block.type === "document") {
     const parts: string[] = [];
@@ -229,6 +247,19 @@ export function PlaybookStageContent({
   onDuplicateQuestion,
   onReorderQuestions,
   formQuestionError,
+  onCreateDimension,
+  onUpdateDimension,
+  onDuplicateDimension,
+  onDeleteDimension,
+  onReorderDimensions,
+  onCreateCriterion,
+  onUpdateCriterion,
+  onDuplicateCriterion,
+  onDeleteCriterion,
+  onReorderCriteria,
+  analysisCriterionError,
+  onUpdateBlockMetadata,
+  resourceOptions,
   onBack,
   focusHint,
 }: {
@@ -253,14 +284,29 @@ export function PlaybookStageContent({
   onDuplicateQuestion: (blockId: string, question: PlaybookFormQuestionRow) => void;
   onReorderQuestions: (blockId: string, orderedIds: string[]) => void;
   formQuestionError?: string | null;
+  onCreateDimension: (blockId: string, name: string) => void;
+  onUpdateDimension: (blockId: string, dimensionId: string, patch: Record<string, unknown>) => void;
+  onDuplicateDimension: (blockId: string, dimension: PlaybookAnalysisDimensionRow) => void;
+  onDeleteDimension: (blockId: string, dimensionId: string) => void;
+  onReorderDimensions: (blockId: string, orderedIds: string[]) => void;
+  onCreateCriterion: (blockId: string, dimensionId: string, name: string) => void;
+  onUpdateCriterion: (blockId: string, dimensionId: string, criterionId: string, patch: Record<string, unknown>) => void;
+  onDuplicateCriterion: (blockId: string, dimensionId: string, criterion: PlaybookAnalysisCriterionRow) => void;
+  onDeleteCriterion: (blockId: string, dimensionId: string, criterionId: string) => void;
+  onReorderCriteria: (blockId: string, dimensionId: string, orderedIds: string[]) => void;
+  analysisCriterionError?: string | null;
+  onUpdateBlockMetadata: (blockId: string, patch: Record<string, unknown>) => void;
+  resourceOptions: PlaybookResourceOption[];
   onBack: () => void;
   focusHint?: FocusHint | null;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const checklistRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
+  const analysisRef = useRef<HTMLDivElement>(null);
   useBuilderFocus(checklistRef, focusHint?.field === "checklist.items", focusHint?.nonce);
   useBuilderFocus(formRef, focusHint?.field === "form.questions", focusHint?.nonce);
+  useBuilderFocus(analysisRef, Boolean(focusHint?.field?.startsWith("analysis.")), focusHint?.nonce);
 
   if (!stage) {
     return (
@@ -328,6 +374,33 @@ export function PlaybookStageContent({
           onDuplicate={(question) => onDuplicateQuestion(selectedBlock.id, question)}
           onReorder={(orderedIds) => onReorderQuestions(selectedBlock.id, orderedIds)}
           error={formQuestionError}
+        />
+      </div>
+    );
+  }
+  if (selectedBlock?.type === "analysis") {
+    return (
+      <div ref={analysisRef} className="min-w-0 flex-1 space-y-3 rounded-2xl">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs font-bold text-os-muted hover:text-os-ink">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para blocos
+        </button>
+        <AnalysisBuilder
+          block={selectedBlock}
+          siblingBlocks={stage.blocks.filter((b) => b.id !== selectedBlock.id)}
+          resourceOptions={resourceOptions}
+          criterionError={analysisCriterionError}
+          onCreateDimension={(name) => onCreateDimension(selectedBlock.id, name)}
+          onUpdateDimension={(dimensionId, patch) => onUpdateDimension(selectedBlock.id, dimensionId, patch)}
+          onDuplicateDimension={(dimension) => onDuplicateDimension(selectedBlock.id, dimension)}
+          onDeleteDimension={(dimensionId) => onDeleteDimension(selectedBlock.id, dimensionId)}
+          onReorderDimensions={(orderedIds) => onReorderDimensions(selectedBlock.id, orderedIds)}
+          onCreateCriterion={(dimensionId, name) => onCreateCriterion(selectedBlock.id, dimensionId, name)}
+          onUpdateCriterion={(dimensionId, criterionId, patch) => onUpdateCriterion(selectedBlock.id, dimensionId, criterionId, patch)}
+          onDuplicateCriterion={(dimensionId, criterion) => onDuplicateCriterion(selectedBlock.id, dimensionId, criterion)}
+          onDeleteCriterion={(dimensionId, criterionId) => onDeleteCriterion(selectedBlock.id, dimensionId, criterionId)}
+          onReorderCriteria={(dimensionId, orderedIds) => onReorderCriteria(selectedBlock.id, dimensionId, orderedIds)}
+          onUpdateMetadata={(patch) => onUpdateBlockMetadata(selectedBlock.id, patch)}
+          focusHint={focusHint}
         />
       </div>
     );

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  BarChart3,
   CheckSquare,
   ClipboardCheck,
   Clock3,
@@ -23,7 +24,7 @@ const ICONS: Record<PlaybookBlockTypeId, typeof ClipboardList> = {
   meeting: Users,
   form_briefing: FileText,
   document: Upload,
-  analysis: ClipboardCheck,
+  analysis: BarChart3,
   deliverable: Trophy,
   approval: ClipboardCheck,
   wait: Clock3,
@@ -32,7 +33,8 @@ const ICONS: Record<PlaybookBlockTypeId, typeof ClipboardList> = {
 };
 
 // Cor discreta por tipo — só em ícone/badge/marca lateral (regra do pedido:
-// verde da Brain fica exclusivo de seleção/ação primária/sucesso).
+// verde da Brain fica exclusivo de seleção/ação primária/sucesso). Análise
+// usa azul-violeta (indigo), discreto e diferente das outras 6 já ativas.
 const COLOR_STYLE: Record<string, { chip: string; badge: string; border: string }> = {
   violet: { chip: "bg-violet-100 text-violet-700", badge: "bg-violet-50 text-violet-700", border: "hover:border-violet-300" },
   blue: { chip: "bg-blue-100 text-blue-700", badge: "bg-blue-50 text-blue-700", border: "hover:border-blue-300" },
@@ -40,6 +42,7 @@ const COLOR_STYLE: Record<string, { chip: string; badge: string; border: string 
   orange: { chip: "bg-orange-100 text-orange-700", badge: "bg-orange-50 text-orange-700", border: "hover:border-orange-300" },
   pink: { chip: "bg-pink-100 text-pink-700", badge: "bg-pink-50 text-pink-700", border: "hover:border-pink-300" },
   slate: { chip: "bg-slate-100 text-slate-600", badge: "bg-slate-50 text-slate-600", border: "hover:border-slate-300" },
+  indigo: { chip: "bg-indigo-100 text-indigo-700", badge: "bg-indigo-50 text-indigo-700", border: "hover:border-indigo-300" },
 };
 
 export function BlockTypePicker({
@@ -47,7 +50,7 @@ export function BlockTypePicker({
   onSelect,
 }: {
   onCancel: () => void;
-  onSelect: (type: "internal_task" | "client_request" | "checklist" | "meeting" | "form_briefing" | "document") => void;
+  onSelect: (type: "internal_task" | "client_request" | "checklist" | "meeting" | "form_briefing" | "document" | "analysis") => void;
 }) {
   const [query, setQuery] = useState("");
 

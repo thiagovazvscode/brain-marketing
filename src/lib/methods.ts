@@ -142,10 +142,14 @@ export const PLAYBOOK_BLOCK_TYPES = [
   { id: "meeting", label: "Reunião", active: true, category: "interacao", description: "Reuniões e encontros com o cliente ou equipe.", color: "orange" },
   { id: "form_briefing", label: "Formulário / Briefing", active: true, category: "interacao", description: "Coleta estruturada de informações com o cliente ou equipe.", color: "pink" },
   { id: "document", label: "Documento", active: true, category: "conteudo", description: "Documentos necessários, de referência ou produzidos.", color: "slate" },
-  { id: "analysis", label: "Análise", active: false, category: "futuro", description: "Análise estruturada de dados ou contexto do cliente.", color: "slate" },
-  { id: "deliverable", label: "Entregável", active: false, category: "futuro", description: "Entrega formal de um resultado ao cliente.", color: "slate" },
-  { id: "approval", label: "Aprovação", active: false, category: "futuro", description: "Aprovação formal de uma etapa ou entrega.", color: "slate" },
-  { id: "milestone", label: "Marco", active: false, category: "futuro", description: "Marco de referência na linha do tempo do playbook.", color: "slate" },
+  // Fase 2.2B.1: Análise habilitada; Entregável/Aprovação/Marco continuam
+  // "Em breve" mas já entram na categoria "Produção e Validação" (mesma
+  // agrupação da referência visual do pedido) — Espera/Condição não fazem
+  // parte desse grupo, ficam soltos em "futuro".
+  { id: "analysis", label: "Análise", active: true, category: "producao_validacao", description: "Avaliação estruturada de dados, processos, evidências e desempenho.", color: "indigo" },
+  { id: "deliverable", label: "Entregável", active: false, category: "producao_validacao", description: "Entrega formal de um resultado ao cliente.", color: "slate" },
+  { id: "approval", label: "Aprovação", active: false, category: "producao_validacao", description: "Aprovação formal de uma etapa ou entrega.", color: "slate" },
+  { id: "milestone", label: "Marco", active: false, category: "producao_validacao", description: "Marco de referência na linha do tempo do playbook.", color: "slate" },
   { id: "wait", label: "Espera", active: false, category: "futuro", description: "Período de espera antes de seguir para o próximo bloco.", color: "slate" },
   { id: "condition", label: "Condição", active: false, category: "futuro", description: "Ramificação condicional entre blocos.", color: "slate" },
 ] as const;
@@ -156,6 +160,7 @@ export const PLAYBOOK_BLOCK_CATEGORIES = [
   { id: "execucao", label: "Execução" },
   { id: "interacao", label: "Interação" },
   { id: "conteudo", label: "Conteúdo e arquivos" },
+  { id: "producao_validacao", label: "Produção e Validação" },
   { id: "futuro", label: "Próximas entregas" },
 ] as const;
 
@@ -447,6 +452,187 @@ export function sanitizeDocumentMetadata(input: unknown): { metadata: Record<str
   }
 
   return { metadata: out };
+}
+
+// ── Fase 2.2B.1 — Análise ────────────────────────────────────────────────
+// analysisType é texto validado em app (lista que cresce, mesmo raciocínio
+// de meetingType/documentCategory) — ao contrário de evaluationType, que é
+// enum do banco (analysis_evaluation_type: 8 valores fixos do pedido).
+export const ANALYSIS_TYPES = [
+  { id: "diagnostico", label: "Diagnóstico" },
+  { id: "auditoria", label: "Auditoria" },
+  { id: "comparacao", label: "Comparação" },
+  { id: "avaliacao_desempenho", label: "Avaliação de desempenho" },
+  { id: "analise_dados", label: "Análise de dados" },
+  { id: "analise_qualitativa", label: "Análise qualitativa" },
+  { id: "personalizada", label: "Análise personalizada" },
+] as const;
+
+// Espelha o enum do banco (analysis_evaluation_type) — só pra label/opções
+// no frontend e validação de app; o enum do banco é a garantia real.
+export const ANALYSIS_EVALUATION_TYPES = [
+  { id: "texto_livre", label: "Texto livre" },
+  { id: "sim_nao", label: "Sim ou não" },
+  { id: "nota_0_5", label: "Nota de 0 a 5" },
+  { id: "nota_0_10", label: "Nota de 0 a 10" },
+  { id: "percentual", label: "Percentual" },
+  { id: "classificacao", label: "Classificação" },
+  { id: "numero", label: "Número" },
+  { id: "moeda", label: "Moeda" },
+] as const;
+
+export type AnalysisEvaluationTypeId = (typeof ANALYSIS_EVALUATION_TYPES)[number]["id"];
+// Só esse tipo tem sublista de opções estruturadas (item 9 do pedido).
+export const ANALYSIS_EVALUATION_TYPES_WITH_OPTIONS: AnalysisEvaluationTypeId[] = ["classificacao"];
+export const ANALYSIS_CLASSIFICATION_DEFAULT_OPTIONS = ["Crítico", "Abaixo do esperado", "Adequado", "Bom", "Excelente"];
+
+export const ANALYSIS_SOURCE_TYPES = [
+  { id: "meeting", label: "Reunião" },
+  { id: "checklist", label: "Checklist" },
+  { id: "form_briefing", label: "Formulário/Briefing" },
+  { id: "document", label: "Documento" },
+  { id: "internal_task", label: "Tarefa interna" },
+  { id: "client_request", label: "Solicitação ao cliente" },
+  { id: "resource", label: "Recurso da biblioteca" },
+  { id: "personalizada", label: "Fonte personalizada" },
+] as const;
+
+// Limites defensivos (item 21 do pedido) — nunca confiar só no frontend.
+export const MAX_ANALYSIS_DIMENSIONS_PER_BLOCK = 30;
+export const MAX_ANALYSIS_CRITERIA_PER_DIMENSION = 100;
+export const MAX_ANALYSIS_CLASSIFICATION_OPTIONS = 50;
+export const MAX_ANALYSIS_SOURCES = 50;
+
+export const analysisTypeLabel = (id: string | null) => labelOf(ANALYSIS_TYPES, id);
+export const analysisEvaluationTypeLabel = (id: string | null) => labelOf(ANALYSIS_EVALUATION_TYPES, id);
+export const analysisSourceTypeLabel = (id: string | null) => labelOf(ANALYSIS_SOURCE_TYPES, id);
+
+export const isValidAnalysisType = (id: string) => ANALYSIS_TYPES.some((s) => s.id === id);
+export const isValidAnalysisEvaluationType = (id: string): id is AnalysisEvaluationTypeId =>
+  ANALYSIS_EVALUATION_TYPES.some((s) => s.id === id);
+export const isValidAnalysisSourceType = (id: string) => ANALYSIS_SOURCE_TYPES.some((s) => s.id === id);
+
+/** metadata de Análise — tipagem/metodologia/fontes/conclusões, mesmo raciocínio de sanitizeMeetingMetadata/sanitizeDocumentMetadata. */
+export function sanitizeAnalysisMetadata(input: unknown): { metadata: Record<string, unknown> } | { error: string } {
+  if (input === undefined || input === null) return { metadata: {} };
+  if (typeof input !== "object") return { error: "Configuração da análise inválida." };
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if (src.analysisType !== undefined) {
+    if (typeof src.analysisType !== "string" || !isValidAnalysisType(src.analysisType)) return { error: "Tipo de análise inválido." };
+    out.analysisType = src.analysisType;
+  }
+  if (src.objective !== undefined) {
+    if (typeof src.objective !== "string") return { error: "Objetivo inválido." };
+    out.objective = src.objective.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.method !== undefined) {
+    if (typeof src.method !== "string") return { error: "Método utilizado inválido." };
+    out.method = src.method.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.analyzedPeriod !== undefined) {
+    if (typeof src.analyzedPeriod !== "string") return { error: "Período analisado inválido." };
+    out.analyzedPeriod = src.analyzedPeriod.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.requiresEvidence !== undefined) out.requiresEvidence = Boolean(src.requiresEvidence);
+  if (src.useWeights !== undefined) out.useWeights = Boolean(src.useWeights);
+  if (src.scoringSystem !== undefined) {
+    if (typeof src.scoringSystem !== "string") return { error: "Sistema de pontuação inválido." };
+    out.scoringSystem = src.scoringSystem.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.methodologyNotes !== undefined) {
+    if (typeof src.methodologyNotes !== "string") return { error: "Observações metodológicas inválidas." };
+    out.methodologyNotes = src.methodologyNotes.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.collaborators !== undefined) out.collaborators = sanitizeStringList(src.collaborators);
+  if (src.sources !== undefined) {
+    if (!Array.isArray(src.sources)) return { error: "Fontes de informação inválidas." };
+    if (src.sources.length > MAX_ANALYSIS_SOURCES) return { error: `Limite de ${MAX_ANALYSIS_SOURCES} fontes por análise.` };
+    const sources: Record<string, unknown>[] = [];
+    for (const raw of src.sources) {
+      if (!raw || typeof raw !== "object") return { error: "Uma das fontes de informação é inválida." };
+      const s = raw as Record<string, unknown>;
+      if (typeof s.type !== "string" || !isValidAnalysisSourceType(s.type)) return { error: "Tipo de fonte inválido." };
+      if (typeof s.label !== "string" || !s.label.trim()) return { error: "Toda fonte precisa de um nome." };
+      sources.push({
+        type: s.type,
+        sourceBlockId: typeof s.sourceBlockId === "string" ? s.sourceBlockId : null,
+        resourceId: typeof s.resourceId === "string" ? s.resourceId : null,
+        label: s.label.trim().slice(0, MAX_SHORT_TEXT_LENGTH),
+        required: Boolean(s.required),
+        purpose: typeof s.purpose === "string" ? s.purpose.trim().slice(0, MAX_LONG_TEXT_LENGTH) : "",
+      });
+    }
+    out.sources = sources;
+  }
+  if (src.synthesisRequired !== undefined) out.synthesisRequired = Boolean(src.synthesisRequired);
+  if (src.recommendationsRequired !== undefined) out.recommendationsRequired = Boolean(src.recommendationsRequired);
+  if (src.mainProblems !== undefined) out.mainProblems = sanitizeStringList(src.mainProblems);
+  if (src.strengths !== undefined) out.strengths = sanitizeStringList(src.strengths);
+  if (src.risks !== undefined) out.risks = sanitizeStringList(src.risks);
+  if (src.opportunities !== undefined) out.opportunities = sanitizeStringList(src.opportunities);
+  if (src.recommendations !== undefined) out.recommendations = sanitizeStringList(src.recommendations);
+  if (src.priorities !== undefined) out.priorities = sanitizeStringList(src.priorities);
+  if (src.attachedEvidence !== undefined) out.attachedEvidence = sanitizeStringList(src.attachedEvidence);
+  if (src.relatedDeliverable !== undefined) {
+    if (typeof src.relatedDeliverable !== "string") return { error: "Entregável relacionado inválido." };
+    out.relatedDeliverable = src.relatedDeliverable.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+  if (src.finalNotes !== undefined) {
+    if (typeof src.finalNotes !== "string") return { error: "Observações finais inválidas." };
+    out.finalNotes = src.finalNotes.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.allowPartialAnalysis !== undefined) out.allowPartialAnalysis = Boolean(src.allowPartialAnalysis);
+  if (src.requiresInternalReview !== undefined) out.requiresInternalReview = Boolean(src.requiresInternalReview);
+
+  return { metadata: out };
+}
+
+/** 0-100 ou null — mesma regra pra peso de dimensão e de critério (CHECK do banco é o backstop, isto valida antes de chegar lá). */
+export function validateAnalysisWeight(weight: unknown): { weight: number | null } | { error: string } {
+  if (weight === null || weight === undefined) return { weight: null };
+  if (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0 || weight > 100) {
+    return { error: "Peso deve ser um número entre 0 e 100." };
+  }
+  return { weight: Math.round(weight) };
+}
+
+/** Classificação exige >= 2 opções válidas, sem duplicadas após normalizar (item 5/9 do pedido); outros tipos ignoram options. */
+export function validateAnalysisCriterionOptions(
+  evaluationType: string,
+  options: string[] | undefined
+): { options: string[] } | { error: string } {
+  const cleaned = (options ?? []).map((o) => o.trim()).filter(Boolean);
+  if (ANALYSIS_EVALUATION_TYPES_WITH_OPTIONS.includes(evaluationType as AnalysisEvaluationTypeId)) {
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const opt of cleaned) {
+      const key = opt.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(opt);
+    }
+    if (deduped.length < 2) return { error: "Classificação exige pelo menos duas opções válidas." };
+    if (deduped.length > MAX_ANALYSIS_CLASSIFICATION_OPTIONS) return { error: `Limite de ${MAX_ANALYSIS_CLASSIFICATION_OPTIONS} opções por critério.` };
+    if (deduped.some((o) => o.length > MAX_LIST_ENTRY_LENGTH)) return { error: "Uma das opções está muito longa." };
+    return { options: deduped };
+  }
+  return { options: [] };
+}
+
+/**
+ * Regra única de "a análise exige evidência" — usada tanto na validação
+ * quanto na pré-visualização, pra nunca divergir entre as duas. Verdadeiro
+ * quando o toggle global de evidência está ativo OU quando ao menos um
+ * critério ativo, de uma dimensão ativa, tem requiresEvidence = true.
+ */
+export function analysisRequiresEvidence(
+  metaRequiresEvidence: unknown,
+  dimensions: { isActive: boolean; criteria: { isActive: boolean; requiresEvidence: boolean }[] }[]
+): boolean {
+  if (metaRequiresEvidence) return true;
+  return dimensions.some((d) => d.isActive && d.criteria.some((c) => c.isActive && c.requiresEvidence));
 }
 
 // "Ação em caso de atraso" do pedido pra Reunião/Checklist/Formulário/

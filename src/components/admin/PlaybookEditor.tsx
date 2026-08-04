@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { X } from "lucide-react";
 import type {
+  PlaybookAnalysisCriterionRow,
+  PlaybookAnalysisDimensionRow,
   PlaybookChecklistItemRow,
   PlaybookEditorData,
   PlaybookFormQuestionRow,
@@ -50,7 +52,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showStageForm, setShowStageForm] = useState(false);
   const [blockPickerStageId, setBlockPickerStageId] = useState<string | null>(null);
-  const [newBlockType, setNewBlockType] = useState<"meeting" | "checklist" | "form_briefing" | "document" | null>(null);
+  const [newBlockType, setNewBlockType] = useState<"meeting" | "checklist" | "form_briefing" | "document" | "analysis" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
@@ -59,7 +61,14 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [error, setError] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [formQuestionError, setFormQuestionError] = useState<string | null>(null);
+  const [analysisCriterionError, setAnalysisCriterionError] = useState<string | null>(null);
   const [focusHint, setFocusHint] = useState<FocusHint | null>(null);
+  // Token por alvo de reorder (blockId p/ dimensões, dimensionId p/ critérios)
+  // — incrementado a cada drag solto. Uma resposta (sucesso ou falha) só
+  // mexe no estado se ainda for a mais recente pro alvo; senão é descartada,
+  // pra nunca deixar uma requisição antiga sobrescrever um reorder mais novo
+  // (ex.: dois arrastos rápidos em sequência).
+  const reorderTokenRef = useRef<Record<string, number>>({});
 
   const selectedStage = selection ? stages.find((s) => s.id === selection.stageId) ?? null : null;
   const selectedBlock =
@@ -167,17 +176,18 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
 
   async function createRichBlock(
     stageId: string,
-    type: "meeting" | "checklist" | "form_briefing" | "document",
+    type: "meeting" | "checklist" | "form_briefing" | "document" | "analysis",
     payload: {
       title: string;
       metadata?: Record<string, unknown>;
+      expectedResult?: string;
       checklistItems?: { title: string }[];
       questions?: { label: string; questionType: string }[];
     }
   ) {
     const { block } = await api<{ block: { id: string } }>(`${base}/stages/${stageId}/blocks`, {
       method: "POST",
-      body: JSON.stringify({ type, title: payload.title, metadata: payload.metadata }),
+      body: JSON.stringify({ type, title: payload.title, metadata: payload.metadata, expectedResult: payload.expectedResult }),
     });
 
     // Itens/perguntas escolhidos na criação são criados em sequência
@@ -367,6 +377,240 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
     }
   }
 
+  // Fontes/conclusões da Análise moram em metadata (não em tabela própria —
+  // ver AnalysisBlockMetadata) e são editadas no centro (construtor), não no
+  // painel direito — por isso um patch dedicado que faz merge com o
+  // metadata já salvo, em vez de exigir o objeto inteiro a cada chamada.
+  async function updateBlockMetadata(stageId: string, blockId: string, metadataPatch: Record<string, unknown>) {
+    const stage = stages.find((s) => s.id === stageId);
+    const block = stage?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ metadata: { ...(block.metadata ?? {}), ...metadataPatch } }),
+      });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível salvar.");
+    }
+  }
+
+  // ── Dimensões e critérios de Análise (Fase 2.2B.1) ───────────────────
+  async function createDimension(stageId: string, blockId: string, name: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims`, { method: "POST", body: JSON.stringify({ name }) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível criar a dimensão.");
+    }
+  }
+
+  async function updateDimension(stageId: string, blockId: string, dimensionId: string, patch: Record<string, unknown>) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}`, { method: "PATCH", body: JSON.stringify(patch) });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível atualizar a dimensão.");
+    }
+  }
+
+  async function duplicateDimension(stageId: string, blockId: string, dimension: PlaybookAnalysisDimensionRow) {
+    try {
+      const { dimension: created } = await api<{ dimension: { id: string } }>(`${base}/stages/${stageId}/blocks/${blockId}/dims`, {
+        method: "POST",
+        body: JSON.stringify({ name: `${dimension.name} (cópia)`, description: dimension.description ?? undefined, weight: dimension.weight }),
+      });
+      for (const criterion of dimension.criteria) {
+        await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${created.id}/crit`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: criterion.name,
+            description: criterion.description ?? undefined,
+            evaluationType: criterion.evaluationType,
+            weight: criterion.weight,
+            isRequired: criterion.isRequired,
+            requiresEvidence: criterion.requiresEvidence,
+            evidenceDescription: criterion.evidenceDescription ?? undefined,
+            guidance: criterion.guidance ?? undefined,
+            options: criterion.options,
+          }),
+        });
+      }
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível duplicar a dimensão.");
+    }
+  }
+
+  async function deleteDimension(stageId: string, blockId: string, dimensionId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}`, { method: "DELETE" });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir a dimensão.");
+    }
+  }
+
+  // Reordena localmente sem tocar em nenhum outro campo — preserva seleção,
+  // estado aberto/fechado e drafts não salvos de outros campos, já que tudo
+  // isso é local ao componente da linha e segue pela `key={id}`, não pelo
+  // índice no array.
+  function applyDimensionOrder(stageId: string, blockId: string, orderedIds: string[]) {
+    setStages((cur) =>
+      cur.map((s) => {
+        if (s.id !== stageId) return s;
+        return {
+          ...s,
+          blocks: s.blocks.map((b) => {
+            if (b.id !== blockId) return b;
+            const byId = new Map(b.analysisDimensions.map((d) => [d.id, d]));
+            const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, position: index }));
+            return { ...b, analysisDimensions: reordered };
+          }),
+        };
+      })
+    );
+  }
+
+  // Otimista: a UI assume a nova ordem no mesmo tick do drop, antes de
+  // qualquer chamada de rede — sem isso, arrastar parece travado porque o
+  // usuário só via a lista mudar depois do POST completar E de um refetch
+  // completo do playbook inteiro. Persistência roda em segundo plano; falha
+  // desfaz só se ainda for a tentativa mais recente (ver reorderTokenRef).
+  async function reorderDimensions(stageId: string, blockId: string, orderedIds: string[]) {
+    const block = stages.find((s) => s.id === stageId)?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const previousOrder = block.analysisDimensions.map((d) => d.id);
+    const key = `dims:${blockId}`;
+    const token = (reorderTokenRef.current[key] ?? 0) + 1;
+    reorderTokenRef.current[key] = token;
+
+    applyDimensionOrder(stageId, blockId, orderedIds);
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/reorder`, { method: "POST", body: JSON.stringify({ orderedIds }) });
+      if (reorderTokenRef.current[key] !== token) return;
+      setSaveState("saved");
+    } catch {
+      if (reorderTokenRef.current[key] !== token) return;
+      applyDimensionOrder(stageId, blockId, previousOrder);
+      reportError("Não foi possível salvar a nova ordem.");
+    }
+  }
+
+  async function createCriterion(stageId: string, blockId: string, dimensionId: string, name: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}/crit`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setAnalysisCriterionError(null);
+      await refetch();
+    } catch (e) {
+      setAnalysisCriterionError(e instanceof Error ? e.message : "Não foi possível criar o critério.");
+    }
+  }
+
+  async function updateCriterion(stageId: string, blockId: string, dimensionId: string, criterionId: string, patch: Record<string, unknown>) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}/crit/${criterionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setAnalysisCriterionError(null);
+      await refetch();
+    } catch (e) {
+      setAnalysisCriterionError(e instanceof Error ? e.message : "Não foi possível atualizar o critério.");
+    }
+  }
+
+  async function duplicateCriterion(stageId: string, blockId: string, dimensionId: string, criterion: PlaybookAnalysisCriterionRow) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}/crit`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: `${criterion.name} (cópia)`,
+          description: criterion.description ?? undefined,
+          evaluationType: criterion.evaluationType,
+          weight: criterion.weight,
+          isRequired: criterion.isRequired,
+          requiresEvidence: criterion.requiresEvidence,
+          evidenceDescription: criterion.evidenceDescription ?? undefined,
+          guidance: criterion.guidance ?? undefined,
+          options: criterion.options,
+        }),
+      });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível duplicar o critério.");
+    }
+  }
+
+  async function deleteCriterion(stageId: string, blockId: string, dimensionId: string, criterionId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}/crit/${criterionId}`, { method: "DELETE" });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir o critério.");
+    }
+  }
+
+  // Mesmo raciocínio de applyDimensionOrder, escopado à dimensão — o
+  // reorder de critérios nunca mexe em outra dimensão porque orderedIds
+  // sempre vem do array `dimension.criteria` de uma dimensão só (ver
+  // AnalysisBuilder), e aqui só o array `criteria` daquela dimensionId é
+  // substituído.
+  function applyCriteriaOrder(stageId: string, blockId: string, dimensionId: string, orderedIds: string[]) {
+    setStages((cur) =>
+      cur.map((s) => {
+        if (s.id !== stageId) return s;
+        return {
+          ...s,
+          blocks: s.blocks.map((b) => {
+            if (b.id !== blockId) return b;
+            return {
+              ...b,
+              analysisDimensions: b.analysisDimensions.map((d) => {
+                if (d.id !== dimensionId) return d;
+                const byId = new Map(d.criteria.map((c) => [c.id, c]));
+                const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, position: index }));
+                return { ...d, criteria: reordered };
+              }),
+            };
+          }),
+        };
+      })
+    );
+  }
+
+  async function reorderCriteria(stageId: string, blockId: string, dimensionId: string, orderedIds: string[]) {
+    const dimension = stages
+      .find((s) => s.id === stageId)
+      ?.blocks.find((b) => b.id === blockId)
+      ?.analysisDimensions.find((d) => d.id === dimensionId);
+    if (!dimension) return;
+    const previousOrder = dimension.criteria.map((c) => c.id);
+    const key = `crit:${dimensionId}`;
+    const token = (reorderTokenRef.current[key] ?? 0) + 1;
+    reorderTokenRef.current[key] = token;
+
+    applyCriteriaOrder(stageId, blockId, dimensionId, orderedIds);
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/dims/${dimensionId}/crit/reorder`, {
+        method: "POST",
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (reorderTokenRef.current[key] !== token) return;
+      setSaveState("saved");
+    } catch {
+      if (reorderTokenRef.current[key] !== token) return;
+      applyCriteriaOrder(stageId, blockId, dimensionId, previousOrder);
+      reportError("Não foi possível salvar a nova ordem.");
+    }
+  }
+
   // ── Autosave (config panel) ──────────────────────────────────────────
   async function saveStage(stageId: string, patch: Record<string, unknown>) {
     const { stage } = await api<{ stage: PlaybookStageRow }>(`${base}/stages/${stageId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -479,6 +723,21 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             onDuplicateQuestion={(blockId, question) => selectedStage && duplicateQuestion(selectedStage.id, blockId, question)}
             onReorderQuestions={(blockId, orderedIds) => selectedStage && reorderQuestions(selectedStage.id, blockId, orderedIds)}
             formQuestionError={formQuestionError}
+            onCreateDimension={(blockId, name) => selectedStage && createDimension(selectedStage.id, blockId, name)}
+            onUpdateDimension={(blockId, dimensionId, patch) => selectedStage && updateDimension(selectedStage.id, blockId, dimensionId, patch)}
+            onDuplicateDimension={(blockId, dimension) => selectedStage && duplicateDimension(selectedStage.id, blockId, dimension)}
+            onDeleteDimension={(blockId, dimensionId) => selectedStage && deleteDimension(selectedStage.id, blockId, dimensionId)}
+            onReorderDimensions={(blockId, orderedIds) => selectedStage && reorderDimensions(selectedStage.id, blockId, orderedIds)}
+            onCreateCriterion={(blockId, dimensionId, name) => selectedStage && createCriterion(selectedStage.id, blockId, dimensionId, name)}
+            onUpdateCriterion={(blockId, dimensionId, criterionId, patch) =>
+              selectedStage && updateCriterion(selectedStage.id, blockId, dimensionId, criterionId, patch)
+            }
+            onDuplicateCriterion={(blockId, dimensionId, criterion) => selectedStage && duplicateCriterion(selectedStage.id, blockId, dimensionId, criterion)}
+            onDeleteCriterion={(blockId, dimensionId, criterionId) => selectedStage && deleteCriterion(selectedStage.id, blockId, dimensionId, criterionId)}
+            onReorderCriteria={(blockId, dimensionId, orderedIds) => selectedStage && reorderCriteria(selectedStage.id, blockId, dimensionId, orderedIds)}
+            analysisCriterionError={analysisCriterionError}
+            onUpdateBlockMetadata={(blockId, patch) => selectedStage && updateBlockMetadata(selectedStage.id, blockId, patch)}
+            resourceOptions={initialData.resources}
             focusHint={focusHint}
           />
 
@@ -589,7 +848,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             setSelection(issue.blockId ? { kind: "block", stageId, blockId: issue.blockId } : { kind: "stage", stageId });
             setConfigOpen(true);
             setShowValidation(false);
-            setFocusHint({ field: issue.field, nonce: Date.now() });
+            setFocusHint({ field: issue.field, dimensionId: issue.dimensionId, criterionId: issue.criterionId, nonce: Date.now() });
           }}
           onClose={() => setShowValidation(false)}
         />

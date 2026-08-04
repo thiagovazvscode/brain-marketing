@@ -21,6 +21,15 @@ export function ListFieldEditor({
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
+  // Draft local por item, comitado só no blur — mesmo raciocínio do peso em
+  // CriterionRow: um onChange por tecla dispara um PATCH por tecla, e dois
+  // PATCHes concorrentes podem responder fora de ordem, salvando um texto
+  // intermediário em vez do que foi digitado por último.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [itemDrafts, setItemDrafts] = useState(values);
+  if (itemDrafts.length !== values.length || itemDrafts.some((v, i) => i !== editingIndex && v !== values[i])) {
+    setItemDrafts(values);
+  }
 
   function add() {
     if (!draft.trim()) return;
@@ -28,8 +37,14 @@ export function ListFieldEditor({
     setDraft("");
   }
 
-  function update(index: number, value: string) {
-    onChange(values.map((v, i) => (i === index ? value : v)));
+  function updateDraft(index: number, value: string) {
+    setItemDrafts((prev) => prev.map((v, i) => (i === index ? value : v)));
+  }
+
+  function commitDraft(index: number) {
+    setEditingIndex(null);
+    if (itemDrafts[index] === values[index]) return;
+    onChange(values.map((v, i) => (i === index ? itemDrafts[index] : v)));
   }
 
   function remove(index: number) {
@@ -48,7 +63,13 @@ export function ListFieldEditor({
     <div className="space-y-1.5">
       {values.map((v, i) => (
         <div key={i} className="flex items-center gap-1">
-          <input value={v} onChange={(e) => update(i, e.target.value)} className={inputClass} />
+          <input
+            value={itemDrafts[i] ?? v}
+            onChange={(e) => updateDraft(i, e.target.value)}
+            onFocus={() => setEditingIndex(i)}
+            onBlur={() => commitDraft(i)}
+            className={inputClass}
+          />
           <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-os-muted hover:text-os-ink disabled:opacity-30">
             <ChevronUp className="h-3.5 w-3.5" />
           </button>

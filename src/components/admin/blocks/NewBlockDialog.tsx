@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import {
+  ANALYSIS_TYPES,
   DOCUMENT_KINDS,
   DOCUMENT_ORIGINS,
   FORM_QUESTION_TYPES,
@@ -22,7 +23,7 @@ const labelClass = "mb-1 block text-[11px] font-medium uppercase tracking-wide t
 // depois que o bloco já foi criado).
 const QUICK_ADD_QUESTION_TYPES = FORM_QUESTION_TYPES.filter((t) => t.id !== "selecao_unica" && t.id !== "multipla_selecao");
 
-type BlockKind = "meeting" | "checklist" | "form_briefing" | "document";
+type BlockKind = "meeting" | "checklist" | "form_briefing" | "document" | "analysis";
 
 interface Props {
   type: BlockKind;
@@ -30,6 +31,7 @@ interface Props {
   onSubmit: (payload: {
     title: string;
     metadata?: Record<string, unknown>;
+    expectedResult?: string;
     checklistItems?: { title: string }[];
     questions?: { label: string; questionType: string }[];
   }) => Promise<void>;
@@ -40,6 +42,7 @@ const TITLES: Record<BlockKind, string> = {
   checklist: "Novo checklist",
   form_briefing: "Novo formulário / briefing",
   document: "Novo documento",
+  analysis: "Nova análise",
 };
 
 export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
@@ -66,6 +69,12 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
   const [questionDraft, setQuestionDraft] = useState("");
   const [questionType, setQuestionType] = useState<string>(QUICK_ADD_QUESTION_TYPES[0].id);
   const [questions, setQuestions] = useState<{ label: string; questionType: string }[]>([]);
+
+  // Análise — só o essencial (item 4 do pedido); dimensões/critérios/
+  // metodologia/fontes só depois que o bloco existir, no editor completo.
+  const [analysisType, setAnalysisType] = useState<string>(ANALYSIS_TYPES[0].id);
+  const [analysisObjective, setAnalysisObjective] = useState("");
+  const [analysisExpectedResult, setAnalysisExpectedResult] = useState("");
 
   function addItem() {
     if (!itemDraft.trim()) return;
@@ -99,6 +108,12 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
         await onSubmit({ title: title.trim(), metadata: { documentKind, origin } });
       } else if (type === "checklist") {
         await onSubmit({ title: title.trim(), checklistItems: items.map((i) => ({ title: i })) });
+      } else if (type === "analysis") {
+        await onSubmit({
+          title: title.trim(),
+          metadata: { analysisType, objective: analysisObjective.trim() || undefined },
+          expectedResult: analysisExpectedResult.trim() || undefined,
+        });
       } else {
         await onSubmit({ title: title.trim(), questions });
       }
@@ -128,7 +143,16 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
           {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
           <div>
-            <label className={labelClass}>{type === "checklist" ? "Nome do checklist" : type === "form_briefing" ? "Nome do formulário" : "Título"} *</label>
+            <label className={labelClass}>
+              {type === "checklist"
+                ? "Nome do checklist"
+                : type === "form_briefing"
+                  ? "Nome do formulário"
+                  : type === "analysis"
+                    ? "Nome da análise"
+                    : "Título"}{" "}
+              *
+            </label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus className={inputClass} />
           </div>
 
@@ -199,6 +223,32 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
                   ))}
                 </select>
               </div>
+            </>
+          )}
+
+          {type === "analysis" && (
+            <>
+              <div>
+                <label className={labelClass}>Tipo da análise</label>
+                <select value={analysisType} onChange={(e) => setAnalysisType(e.target.value)} className={inputClass}>
+                  {ANALYSIS_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Objetivo</label>
+                <input value={analysisObjective} onChange={(e) => setAnalysisObjective(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Resultado esperado</label>
+                <input value={analysisExpectedResult} onChange={(e) => setAnalysisExpectedResult(e.target.value)} className={inputClass} />
+              </div>
+              <p className="text-[11px] text-os-muted">
+                Dimensões, critérios e metodologia poderão ser configurados depois que o bloco for salvo.
+              </p>
             </>
           )}
 

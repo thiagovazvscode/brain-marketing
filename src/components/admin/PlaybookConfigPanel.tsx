@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChevronDown, ChevronUp, MoreHorizontal, Trash2, Copy } from "lucide-react";
 import type { PlaybookBlockRow, PlaybookResourceOption, PlaybookStageRow, SimpleOption } from "@/types/methods";
 import {
+  ANALYSIS_TYPES,
   DOCUMENT_CATEGORIES,
   DOCUMENT_FORMATS,
   DOCUMENT_KINDS,
@@ -91,6 +92,11 @@ function useAutosave<T extends object>(
 
 export interface FocusHint {
   field?: string;
+  // Só para problemas de dimensão/critério de um bloco Análise — permite o
+  // AnalysisBuilder abrir a dimensão/critério certo ao navegar a partir de
+  // um problema da Validação.
+  dimensionId?: string;
+  criterionId?: string;
   // Incrementado a cada clique num problema da Validação — permite focar o
   // mesmo campo duas vezes seguidas (ex.: usuário clica, edita errado, clica
   // de novo no mesmo problema).
@@ -446,6 +452,7 @@ function BlockConfigForm({
   const isDocument = block.type === "document";
   const isChecklist = block.type === "checklist";
   const isForm = block.type === "form_briefing";
+  const isAnalysis = block.type === "analysis";
 
   const meta = draft.metadata;
   function updateMeta<K extends string>(key: K, value: unknown) {
@@ -956,6 +963,183 @@ function BlockConfigForm({
     </CollapsibleFieldGroup>
   );
 
+  // ── Análise (Fase 2.2B.1) ───────────────────────────────────────────
+  const analysisSources = (meta.sources as { required?: boolean }[] | undefined) ?? [];
+  const analysisRequiredSourcesCount = analysisSources.filter((s) => s.required).length;
+
+  const analysisIdentificationFields = ["title", "analysis.objective", "analysis.analysisType"];
+  const analysisIdentification = (
+    <CollapsibleFieldGroup
+      title="Identificação"
+      summary={[draft.title || "Sem nome", ANALYSIS_TYPES.find((t) => t.id === meta.analysisType)?.label].filter(Boolean).join(" · ")}
+      defaultOpen
+      forceOpen={inSection(analysisIdentificationFields)}
+      focusNonce={focusHint?.nonce}
+    >
+      {typeField}
+      <div data-field="title">
+        <label className={labelClass}>Nome da análise</label>
+        <input value={draft.title} onChange={(e) => update("title", e.target.value)} className={inputClass} />
+      </div>
+      <div data-field="analysis.objective">
+        <label className={labelClass}>Objetivo</label>
+        <textarea value={(meta.objective as string) ?? ""} onChange={(e) => updateMeta("objective", e.target.value)} className={`${textareaBase} min-h-[60px]`} rows={3} />
+      </div>
+      <div>
+        <label className={labelClass}>Descrição</label>
+        <textarea value={draft.description} onChange={(e) => update("description", e.target.value)} className={`${textareaBase} min-h-[80px]`} />
+      </div>
+      <div data-field="analysis.analysisType">
+        <label className={labelClass}>Tipo da análise</label>
+        <select value={(meta.analysisType as string) ?? ""} onChange={(e) => updateMeta("analysisType", e.target.value)} className={inputClass}>
+          <option value="">Selecionar</option>
+          {ANALYSIS_TYPES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const analysisMethodologySummary = [
+    ANALYSIS_TYPES.find((t) => t.id === meta.analysisType)?.label,
+    meta.useWeights ? "Pesos ativos" : null,
+    meta.requiresEvidence ? "Evidência obrigatória" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const analysisMethodology = (
+    <CollapsibleFieldGroup title="Metodologia" summary={analysisMethodologySummary || "Sem metodologia definida"}>
+      <div>
+        <label className={labelClass}>Método utilizado</label>
+        <input value={(meta.method as string) ?? ""} onChange={(e) => updateMeta("method", e.target.value)} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Instrução interna</label>
+        <textarea
+          value={draft.internalInstructions}
+          onChange={(e) => update("internalInstructions", e.target.value)}
+          className={`${textareaBase} min-h-[80px]`}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>Período analisado</label>
+        <input
+          value={(meta.analyzedPeriod as string) ?? ""}
+          onChange={(e) => updateMeta("analyzedPeriod", e.target.value)}
+          placeholder="Ex: últimos 90 dias"
+          className={inputClass}
+        />
+      </div>
+      <p className="rounded-lg border border-dashed border-os-border bg-os-bg/40 px-3 py-2 text-[11px] leading-snug text-os-muted">
+        {analysisSources.length === 0
+          ? "Nenhuma fonte vinculada ainda."
+          : `${analysisSources.length} ${analysisSources.length === 1 ? "fonte vinculada" : "fontes vinculadas"} (${analysisRequiredSourcesCount} obrigatória${analysisRequiredSourcesCount === 1 ? "" : "s"})`}{" "}
+        — gerencie na aba &quot;Fontes de informação&quot; do construtor.
+      </p>
+      <Switch checked={Boolean(meta.requiresEvidence)} onChange={(v) => updateMeta("requiresEvidence", v)} label="Exige evidências" />
+      <Switch checked={Boolean(meta.useWeights)} onChange={(v) => updateMeta("useWeights", v)} label="Utilizar pesos" />
+      <div>
+        <label className={labelClass}>Sistema de pontuação</label>
+        <input
+          value={(meta.scoringSystem as string) ?? ""}
+          onChange={(e) => updateMeta("scoringSystem", e.target.value)}
+          placeholder="Ex: média ponderada por dimensão"
+          className={inputClass}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>Observações metodológicas</label>
+        <textarea value={(meta.methodologyNotes as string) ?? ""} onChange={(e) => updateMeta("methodologyNotes", e.target.value)} className={`${textareaBase} min-h-[80px]`} />
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const analysisResponsibleSummary = [
+    draft.assigneeType === "papel_padrao" && draft.defaultAssigneeRole
+      ? playbookAssigneeRoleLabel(draft.defaultAssigneeRole)
+      : draft.assigneeType === "usuario_especifico" && draft.defaultAssigneeId
+        ? (assigneeOptions.find((a) => a.id === draft.defaultAssigneeId)?.name ?? "Usuário selecionado")
+        : "A definir ao aplicar",
+    draft.dueOffsetValue != null ? `${draft.dueOffsetValue} ${durationUnitLabel(draft.dueOffsetUnit)}` : "Sem prazo definido",
+  ].join(" · ");
+
+  const analysisResponsibility = (
+    <CollapsibleFieldGroup
+      title="Responsabilidade e prazo"
+      summary={analysisResponsibleSummary}
+      forceOpen={inSection(["assignee", "dueOffsetValue"])}
+      focusNonce={focusHint?.nonce}
+    >
+      {internalAssigneeField}
+      <div>
+        <label className={labelClass}>Colaboradores</label>
+        <ListFieldEditor values={(meta.collaborators as string[]) ?? []} onChange={(v) => updateMeta("collaborators", v)} placeholder="Adicionar colaborador" />
+      </div>
+      {dueAndPriority}
+    </CollapsibleFieldGroup>
+  );
+
+  const analysisResultFields = ["expectedResult", "analysis.completionCriteria"];
+  const analysisResultSummary = [
+    meta.synthesisRequired ? "Síntese obrigatória" : "Síntese opcional",
+    meta.recommendationsRequired ? "Recomendações obrigatórias" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const analysisResult = (
+    <CollapsibleFieldGroup
+      title="Resultado esperado"
+      summary={analysisResultSummary}
+      forceOpen={inSection(analysisResultFields)}
+      focusNonce={focusHint?.nonce}
+    >
+      <div data-field="expectedResult">
+        <label className={labelClass}>Resultado esperado</label>
+        <textarea value={draft.expectedResult} onChange={(e) => update("expectedResult", e.target.value)} className={`${textareaBase} min-h-[80px]`} />
+      </div>
+      <Switch checked={Boolean(meta.synthesisRequired)} onChange={(v) => updateMeta("synthesisRequired", v)} label="Síntese obrigatória" />
+      <Switch checked={Boolean(meta.recommendationsRequired)} onChange={(v) => updateMeta("recommendationsRequired", v)} label="Recomendações obrigatórias" />
+      <div>
+        <label className={labelClass}>Entregável relacionado</label>
+        <input
+          value=""
+          disabled
+          placeholder="Disponível após a implementação do bloco Entregável."
+          className={`${inputClass} cursor-not-allowed opacity-60`}
+        />
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const analysisExecutionRules = (
+    <CollapsibleFieldGroup title="Regras de execução" summary={draft.isRequired ? "Obrigatória" : "Opcional"}>
+      {rules}
+      <Switch checked={Boolean(meta.allowPartialAnalysis)} onChange={(v) => updateMeta("allowPartialAnalysis", v)} label="Permite análise parcial" />
+      <Switch checked={Boolean(meta.requiresInternalReview)} onChange={(v) => updateMeta("requiresInternalReview", v)} label="Exige revisão interna" />
+    </CollapsibleFieldGroup>
+  );
+
+  const analysisConclusionFields = ["completionCriteria"];
+  const analysisConclusion = (
+    <CollapsibleFieldGroup
+      title="Conclusão e risco"
+      summary={draft.completionCriteria ? "Critério definido" : "Sem critério de conclusão"}
+      forceOpen={inSection(analysisConclusionFields)}
+      focusNonce={focusHint?.nonce}
+    >
+      <div data-field="completionCriteria">
+        <label className={labelClass}>Critério de conclusão</label>
+        <textarea value={draft.completionCriteria} onChange={(e) => update("completionCriteria", e.target.value)} className={`${textareaBase} min-h-[96px]`} />
+      </div>
+      {overdueField}
+    </CollapsibleFieldGroup>
+  );
+
   // ── Documento ────────────────────────────────────────────────────────
   const documentFileAndResource = (
     <FieldGroup title="Arquivo e recurso">
@@ -1090,6 +1274,17 @@ function BlockConfigForm({
           {meetingPreparation}
           {meetingResult}
           {meetingDeadline}
+        </>
+      )}
+
+      {isAnalysis && (
+        <>
+          {analysisIdentification}
+          {analysisMethodology}
+          {analysisResponsibility}
+          {analysisResult}
+          {analysisExecutionRules}
+          {analysisConclusion}
         </>
       )}
 

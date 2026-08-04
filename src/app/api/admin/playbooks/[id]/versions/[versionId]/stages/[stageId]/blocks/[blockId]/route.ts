@@ -12,6 +12,7 @@ import {
   isValidPlaybookBlockAssigneeType,
   isValidPlaybookBlockPriority,
   isValidPlaybookBlockType,
+  sanitizeAnalysisMetadata,
   sanitizeDocumentMetadata,
   sanitizeMeetingMetadata,
 } from "@/lib/methods";
@@ -60,6 +61,10 @@ async function resolveMetadataPatch(
       if (!resource) return { error: "Recurso vinculado não encontrado." };
     }
     return { metadata: result.metadata };
+  }
+  if (type === "analysis") {
+    const result = sanitizeAnalysisMetadata(raw);
+    return "error" in result ? result : { metadata: result.metadata };
   }
   return { metadata: null };
 }

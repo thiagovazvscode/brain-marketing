@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { playbookVersions } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getStagesWithBlocks } from "@/lib/playbook-builder";
+import { isValidAnalysisEvaluationType, analysisRequiresEvidence } from "@/lib/methods";
 import type { ValidationIssue } from "@/types/methods";
 
 // Validação mínima da Fase 2.1 (§ do pedido). Único erro crítico nesta
@@ -245,6 +246,140 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         }
         if (block.formQuestions.length > 5 && !block.formQuestions.some((q) => q.sectionName)) {
           rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "form.questions", code: "form.questions.noSection", message: `Formulário "${block.title}" tem perguntas sem seção.` });
+        }
+      }
+
+      if (block.type === "analysis") {
+        if (!meta.objective) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.objective", code: "analysis.objective.missing", message: `Análise "${block.title}" sem objetivo.` });
+          blockOk = false;
+        }
+        if (block.analysisDimensions.length === 0) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.dimensions", code: "analysis.dimensions.empty", message: `Análise "${block.title}" sem dimensões.` });
+          blockOk = false;
+        }
+        if (!block.expectedResult?.trim()) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "expectedResult", code: "analysis.expectedResult.missing", message: `Análise "${block.title}" sem resultado esperado.` });
+          blockOk = false;
+        }
+        if (!block.completionCriteria?.trim()) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "completionCriteria", code: "analysis.completionCriteria.missing", message: `Análise "${block.title}" sem critério de conclusão.` });
+          blockOk = false;
+        }
+
+        const useWeights = Boolean(meta.useWeights);
+        let anyDimensionMissingWeight = false;
+        for (const dimension of block.analysisDimensions) {
+          if (dimension.criteria.length === 0) {
+            rawIssues.push({
+              severity: "critico",
+              scope: "bloco",
+              stageId: stage.id,
+              blockId: block.id,
+              dimensionId: dimension.id,
+              field: "analysis.dimensions",
+              code: "analysis.dimension.noCriteria",
+              message: `Dimensão "${dimension.name}" da análise "${block.title}" não tem critérios.`,
+            });
+            blockOk = false;
+          }
+          if (useWeights && dimension.weight == null) anyDimensionMissingWeight = true;
+
+          for (const criterion of dimension.criteria) {
+            if (!criterion.name.trim()) {
+              rawIssues.push({
+                severity: "critico",
+                scope: "bloco",
+                stageId: stage.id,
+                blockId: block.id,
+                dimensionId: dimension.id,
+                criterionId: criterion.id,
+                field: "analysis.dimensions",
+                code: "analysis.criterion.nameMissing",
+                message: `Um critério da dimensão "${dimension.name}" está sem nome.`,
+              });
+              blockOk = false;
+            }
+            if (!isValidAnalysisEvaluationType(criterion.evaluationType)) {
+              rawIssues.push({
+                severity: "critico",
+                scope: "bloco",
+                stageId: stage.id,
+                blockId: block.id,
+                dimensionId: dimension.id,
+                criterionId: criterion.id,
+                field: "analysis.dimensions",
+                code: "analysis.criterion.invalidEvaluationType",
+                message: `Critério "${criterion.name}" tem tipo de avaliação inválido.`,
+              });
+              blockOk = false;
+            }
+            if (criterion.evaluationType === "classificacao" && criterion.options.length < 2) {
+              rawIssues.push({
+                severity: "critico",
+                scope: "bloco",
+                stageId: stage.id,
+                blockId: block.id,
+                dimensionId: dimension.id,
+                criterionId: criterion.id,
+                field: "analysis.dimensions",
+                code: "analysis.criterion.optionsMissing",
+                message: `Critério "${criterion.name}" é de classificação mas tem menos de duas opções.`,
+              });
+              blockOk = false;
+            }
+            if (useWeights && criterion.weight == null) {
+              rawIssues.push({
+                severity: "ajuste",
+                scope: "bloco",
+                stageId: stage.id,
+                blockId: block.id,
+                dimensionId: dimension.id,
+                criterionId: criterion.id,
+                field: "analysis.dimensions",
+                code: "analysis.criterion.weightMissing",
+                message: `Critério "${criterion.name}" está sem peso definido.`,
+              });
+            }
+          }
+        }
+
+        if (anyDimensionMissingWeight) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.dimensions", code: "analysis.dimension.weightMissing", message: `Análise "${block.title}" tem dimensão sem peso definido.` });
+        }
+        if (useWeights && block.analysisDimensions.length > 0) {
+          const weightSum = block.analysisDimensions.reduce((sum, d) => sum + (d.weight ?? 0), 0);
+          if (weightSum !== 100) {
+            rawIssues.push({
+              severity: "ajuste",
+              scope: "bloco",
+              stageId: stage.id,
+              blockId: block.id,
+              field: "analysis.dimensions",
+              code: "analysis.weights.sumNot100",
+              message: `Os pesos das dimensões da análise "${block.title}" somam ${weightSum}%. O recomendado é atingir 100% antes da publicação.`,
+            });
+          }
+        }
+        if (!analysisRequiresEvidence(meta.requiresEvidence, block.analysisDimensions)) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.requiresEvidence", code: "analysis.evidence.none", message: `Análise "${block.title}" não exige evidência.` });
+        }
+        if (!meta.recommendationsRequired) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.recommendationsRequired", code: "analysis.recommendations.notRequired", message: `Análise "${block.title}" não exige recomendações.` });
+        }
+        const totalCriteria = block.analysisDimensions.reduce((sum, d) => sum + d.criteria.length, 0);
+        if (block.analysisDimensions.length > 15 || totalCriteria > 60) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.dimensions", code: "analysis.tooLarge", message: `Análise "${block.title}" está muito extensa (${block.analysisDimensions.length} dimensões, ${totalCriteria} critérios).` });
+        }
+        // analysis.deliverable.none intencionalmente não existe ainda: o
+        // bloco Entregável (Fase 2.2B.2) não foi implementado, então não há
+        // como o usuário resolver esse alerta — reativar quando o bloco
+        // existir.
+        if (!(meta.sources as unknown[] | undefined)?.length) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.sources", code: "analysis.sources.none", message: `Análise "${block.title}" sem fontes vinculadas.` });
+        }
+        if (!meta.analyzedPeriod) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.analyzedPeriod", code: "analysis.period.missing", message: `Análise "${block.title}" sem período analisado definido.` });
         }
       }
 

@@ -1,8 +1,11 @@
 "use client";
 
-import { ClipboardList, FileText, Send, Upload, Users, X } from "lucide-react";
+import { BarChart3, ClipboardList, FileText, Send, Upload, Users, X } from "lucide-react";
 import type { PlaybookBlockRow, PlaybookStageRow, SimpleOption } from "@/types/methods";
 import {
+  analysisEvaluationTypeLabel,
+  analysisRequiresEvidence,
+  analysisTypeLabel,
   documentCategoryLabel,
   documentKindLabel,
   documentOriginLabel,
@@ -26,6 +29,7 @@ const TYPE_CHIP: Record<string, string> = {
   meeting: "bg-orange-100 text-orange-600",
   form_briefing: "bg-pink-100 text-pink-600",
   document: "bg-slate-100 text-slate-600",
+  analysis: "bg-indigo-100 text-indigo-600",
 };
 const TYPE_ICON: Record<string, typeof ClipboardList> = {
   internal_task: ClipboardList,
@@ -34,6 +38,7 @@ const TYPE_ICON: Record<string, typeof ClipboardList> = {
   meeting: Users,
   form_briefing: FileText,
   document: Upload,
+  analysis: BarChart3,
 };
 
 function assigneeSummary(block: PlaybookBlockRow, assigneeOptions: SimpleOption[]): string | null {
@@ -118,6 +123,36 @@ function BlockPreviewDetail({ block, assigneeOptions }: { block: PlaybookBlockRo
           </ul>
         )}
         <p className="mt-1.5 border-t border-dashed border-os-border/50 pt-1.5 italic text-os-muted/70">0 de {block.formQuestions.length} respostas.</p>
+      </div>
+    );
+  }
+
+  if (block.type === "analysis") {
+    const totalCriteria = block.analysisDimensions.reduce((sum, d) => sum + d.criteria.length, 0);
+    const evaluationTypes = [
+      ...new Set(block.analysisDimensions.flatMap((d) => d.criteria.map((c) => analysisEvaluationTypeLabel(c.evaluationType)))),
+    ].filter(Boolean);
+    const sources = (meta.sources as { label: string; required: boolean }[] | undefined) ?? [];
+    const anyWeight = block.analysisDimensions.some((d) => d.weight != null) || block.analysisDimensions.some((d) => d.criteria.some((c) => c.weight != null));
+    const anyEvidence = analysisRequiresEvidence(meta.requiresEvidence, block.analysisDimensions);
+    return (
+      <div className="mt-1.5 space-y-1 text-[11px] text-os-muted">
+        {meta.objective != null && <p>Objetivo: {String(meta.objective)}</p>}
+        <p>
+          {meta.analysisType ? analysisTypeLabel(meta.analysisType as string) : "Tipo a definir"}
+          {responsible ? ` • ${responsible}` : ""}
+        </p>
+        <p>
+          {block.analysisDimensions.length} {block.analysisDimensions.length === 1 ? "dimensão" : "dimensões"} • {totalCriteria}{" "}
+          {totalCriteria === 1 ? "critério" : "critérios"}
+        </p>
+        {evaluationTypes.length > 0 && <p>Tipos de avaliação: {evaluationTypes.join(", ")}</p>}
+        {anyWeight && <p>Utiliza pesos.</p>}
+        {anyEvidence && <p>Exige evidência em ao menos um critério.</p>}
+        {sources.length > 0 && <p>Fontes: {sources.map((s) => s.label).join(", ")}</p>}
+        {block.expectedResult && <p>Resultado esperado: {block.expectedResult}</p>}
+        {block.completionCriteria && <p>Critério de conclusão: {block.completionCriteria}</p>}
+        <p className="mt-1.5 border-t border-dashed border-os-border/50 pt-1.5 italic text-os-muted/70">Análise ainda não realizada.</p>
       </div>
     );
   }
