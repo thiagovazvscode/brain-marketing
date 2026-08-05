@@ -240,7 +240,13 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
               </div>
               <div>
                 <label className={labelClass}>Objetivo</label>
-                <input value={analysisObjective} onChange={(e) => setAnalysisObjective(e.target.value)} className={inputClass} />
+                <textarea
+                  value={analysisObjective}
+                  onChange={(e) => setAnalysisObjective(e.target.value)}
+                  rows={3}
+                  placeholder="Descreva o que esta análise deverá avaliar e esclarecer."
+                  className={`${inputClass} min-h-[72px] resize-y`}
+                />
               </div>
               <div>
                 <label className={labelClass}>Resultado esperado</label>
