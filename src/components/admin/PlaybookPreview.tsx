@@ -1,11 +1,15 @@
 "use client";
 
-import { BarChart3, ClipboardList, FileText, Send, Upload, Users, X } from "lucide-react";
+import { BarChart3, ClipboardList, FileText, Package, Send, Upload, Users, X } from "lucide-react";
 import type { PlaybookBlockRow, PlaybookStageRow, SimpleOption } from "@/types/methods";
 import {
   analysisEvaluationTypeLabel,
   analysisRequiresEvidence,
   analysisTypeLabel,
+  deliverableComponentFormatLabel,
+  deliverableComponentTypeLabel,
+  deliverableFormatLabel,
+  deliverableTypeLabel,
   documentCategoryLabel,
   documentKindLabel,
   documentOriginLabel,
@@ -30,6 +34,7 @@ const TYPE_CHIP: Record<string, string> = {
   form_briefing: "bg-pink-100 text-pink-600",
   document: "bg-slate-100 text-slate-600",
   analysis: "bg-indigo-100 text-indigo-600",
+  deliverable: "bg-blue-200 text-blue-900",
 };
 const TYPE_ICON: Record<string, typeof ClipboardList> = {
   internal_task: ClipboardList,
@@ -39,7 +44,34 @@ const TYPE_ICON: Record<string, typeof ClipboardList> = {
   form_briefing: FileText,
   document: Upload,
   analysis: BarChart3,
+  deliverable: Package,
 };
+
+// Rótulo do prazo no resumo do bloco (item 3 do pedido de homologação) — o
+// texto anterior ("+3") lia como incremento numérico solto, sem unidade
+// visível quando dueOffsetUnit vem nulo do banco (comum a todos os tipos de
+// bloco, não só Entregável — durationUnitLabel(null) retorna "—", daí o
+// resumo antigo aparecer como "+3 — Obrigatória"). Aqui sempre resolve pra
+// uma unidade (mesmo fallback "dias_uteis" já usado no draft do painel de
+// configuração) e pluraliza corretamente, sem alterar o dado salvo.
+const DUE_UNIT_SINGULAR: Record<string, string> = {
+  horas: "hora",
+  dias_corridos: "dia corrido",
+  dias_uteis: "dia útil",
+  semanas: "semana",
+};
+const DUE_UNIT_PLURAL: Record<string, string> = {
+  horas: "horas",
+  dias_corridos: "dias corridos",
+  dias_uteis: "dias úteis",
+  semanas: "semanas",
+};
+
+function dueSummaryLabel(value: number, unit: string | null): string {
+  const resolvedUnit = unit ?? "dias_uteis";
+  const labels = value === 1 ? DUE_UNIT_SINGULAR : DUE_UNIT_PLURAL;
+  return `${value} ${labels[resolvedUnit] ?? durationUnitLabel(resolvedUnit)}`;
+}
 
 function assigneeSummary(block: PlaybookBlockRow, assigneeOptions: SimpleOption[]): string | null {
   if (block.assigneeType === "usuario_especifico") {
@@ -157,6 +189,40 @@ function BlockPreviewDetail({ block, assigneeOptions }: { block: PlaybookBlockRo
     );
   }
 
+  if (block.type === "deliverable") {
+    const activeComponents = block.deliverableComponents.filter((c) => c.isActive);
+    const requiredCount = activeComponents.filter((c) => c.isRequired).length;
+    const additionalFormats = (meta.additionalFormats as string[] | undefined) ?? [];
+    return (
+      <div className="mt-1.5 space-y-1 text-[11px] text-os-muted">
+        {meta.objective != null && <p>Objetivo: {String(meta.objective)}</p>}
+        <p>
+          {meta.deliverableType ? deliverableTypeLabel(meta.deliverableType as string) : "Tipo a definir"}
+          {meta.primaryFormat ? ` • ${deliverableFormatLabel(meta.primaryFormat as string)}` : ""}
+          {responsible ? ` • ${responsible}` : ""}
+        </p>
+        {additionalFormats.length > 0 && <p>Formatos adicionais: {additionalFormats.map((f) => deliverableFormatLabel(f)).join(", ")}</p>}
+        <p>
+          {activeComponents.length} {activeComponents.length === 1 ? "componente" : "componentes"} • {requiredCount}{" "}
+          {requiredCount === 1 ? "obrigatório" : "obrigatórios"}
+        </p>
+        {activeComponents.length > 0 && (
+          <ul className="ml-3 list-disc space-y-0.5">
+            {activeComponents.map((c) => (
+              <li key={c.id}>
+                {c.title} <span className="text-os-muted/70">({deliverableComponentTypeLabel(c.componentType)} · {deliverableComponentFormatLabel(c.expectedFormat)})</span>{" "}
+                {c.isRequired && <span className="font-semibold text-os-accent">•</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {meta.requiresInternalReview ? <p>Exige revisão interna.</p> : null}
+        {block.completionCriteria && <p>Critério de conclusão: {block.completionCriteria}</p>}
+        <p className="mt-1.5 border-t border-dashed border-os-border/50 pt-1.5 italic text-os-muted/70">Entregável ainda não produzido.</p>
+      </div>
+    );
+  }
+
   if (block.type === "document") {
     const formats = (meta.acceptedFormats as string[] | undefined) ?? [];
     return (
@@ -253,11 +319,9 @@ export function PlaybookPreview({
                           <span className="font-semibold text-os-ink">{block.title}</span>
                           <span className="text-os-muted">{playbookBlockTypeLabel(block.type)}</span>
                           {block.dueOffsetValue != null && (
-                            <span className="text-os-muted">
-                              +{block.dueOffsetValue} {durationUnitLabel(block.dueOffsetUnit)}
-                            </span>
+                            <span className="text-os-muted">• {dueSummaryLabel(block.dueOffsetValue, block.dueOffsetUnit)}</span>
                           )}
-                          {block.isRequired && <span className="font-semibold text-os-accent">Obrigatória</span>}
+                          {block.isRequired && <span className="font-semibold text-os-accent">• Obrigatória</span>}
                         </div>
                         <BlockPreviewDetail block={block} assigneeOptions={assigneeOptions} />
                       </li>

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import {
   ANALYSIS_TYPES,
+  DELIVERABLE_FORMATS,
+  DELIVERABLE_TYPES,
   DOCUMENT_KINDS,
   DOCUMENT_ORIGINS,
   FORM_QUESTION_TYPES,
@@ -23,7 +25,7 @@ const labelClass = "mb-1 block text-[11px] font-medium uppercase tracking-wide t
 // depois que o bloco já foi criado).
 const QUICK_ADD_QUESTION_TYPES = FORM_QUESTION_TYPES.filter((t) => t.id !== "selecao_unica" && t.id !== "multipla_selecao");
 
-type BlockKind = "meeting" | "checklist" | "form_briefing" | "document" | "analysis";
+type BlockKind = "meeting" | "checklist" | "form_briefing" | "document" | "analysis" | "deliverable";
 
 interface Props {
   type: BlockKind;
@@ -43,6 +45,7 @@ const TITLES: Record<BlockKind, string> = {
   form_briefing: "Novo formulário / briefing",
   document: "Novo documento",
   analysis: "Nova análise",
+  deliverable: "Novo entregável",
 };
 
 export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
@@ -75,6 +78,12 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
   const [analysisType, setAnalysisType] = useState<string>(ANALYSIS_TYPES[0].id);
   const [analysisObjective, setAnalysisObjective] = useState("");
   const [analysisExpectedResult, setAnalysisExpectedResult] = useState("");
+
+  // Entregável — só o essencial (item 3 do pedido da Fase 2.2B.2A);
+  // componentes só depois que o bloco existir, no editor especializado.
+  const [deliverableType, setDeliverableType] = useState<string>(DELIVERABLE_TYPES[0].id);
+  const [deliverableObjective, setDeliverableObjective] = useState("");
+  const [deliverablePrimaryFormat, setDeliverablePrimaryFormat] = useState<string>(DELIVERABLE_FORMATS[0].id);
 
   function addItem() {
     if (!itemDraft.trim()) return;
@@ -114,6 +123,15 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
           metadata: { analysisType, objective: analysisObjective.trim() || undefined },
           expectedResult: analysisExpectedResult.trim() || undefined,
         });
+      } else if (type === "deliverable") {
+        await onSubmit({
+          title: title.trim(),
+          metadata: {
+            deliverableType,
+            objective: deliverableObjective.trim() || undefined,
+            primaryFormat: deliverablePrimaryFormat,
+          },
+        });
       } else {
         await onSubmit({ title: title.trim(), questions });
       }
@@ -150,7 +168,9 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
                   ? "Nome do formulário"
                   : type === "analysis"
                     ? "Nome da análise"
-                    : "Título"}{" "}
+                    : type === "deliverable"
+                      ? "Nome do entregável"
+                      : "Título"}{" "}
               *
             </label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus className={inputClass} />
@@ -254,6 +274,44 @@ export function NewBlockDialog({ type, onCancel, onSubmit }: Props) {
               </div>
               <p className="text-[11px] text-os-muted">
                 Dimensões, critérios e metodologia poderão ser configurados depois que o bloco for salvo.
+              </p>
+            </>
+          )}
+
+          {type === "deliverable" && (
+            <>
+              <div>
+                <label className={labelClass}>Tipo do entregável</label>
+                <select value={deliverableType} onChange={(e) => setDeliverableType(e.target.value)} className={inputClass}>
+                  {DELIVERABLE_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Objetivo</label>
+                <textarea
+                  value={deliverableObjective}
+                  onChange={(e) => setDeliverableObjective(e.target.value)}
+                  rows={3}
+                  placeholder="Descreva o resultado que deverá ser produzido e o valor que este entregável deverá gerar."
+                  className={`${inputClass} min-h-[72px] resize-y`}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Formato principal</label>
+                <select value={deliverablePrimaryFormat} onChange={(e) => setDeliverablePrimaryFormat(e.target.value)} className={inputClass}>
+                  {DELIVERABLE_FORMATS.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[11px] text-os-muted">
+                Componentes e demais regras poderão ser configurados depois que o bloco for salvo.
               </p>
             </>
           )}

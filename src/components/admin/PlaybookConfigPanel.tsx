@@ -5,6 +5,8 @@ import { ChevronDown, ChevronUp, MoreHorizontal, Trash2, Copy } from "lucide-rea
 import type { PlaybookBlockRow, PlaybookResourceOption, PlaybookStageRow, SimpleOption } from "@/types/methods";
 import {
   ANALYSIS_TYPES,
+  DELIVERABLE_FORMATS,
+  DELIVERABLE_TYPES,
   DOCUMENT_CATEGORIES,
   DOCUMENT_FORMATS,
   DOCUMENT_KINDS,
@@ -21,6 +23,8 @@ import {
   PLAYBOOK_BLOCK_ASSIGNEE_TYPES,
   PLAYBOOK_BLOCK_PRIORITIES,
   PLAYBOOK_EXTERNAL_CONTACT_ROLES,
+  deliverableFormatLabel,
+  deliverableTypeLabel,
   durationUnitLabel,
   meetingDurationUnitLabel,
   meetingFormatLabel,
@@ -97,6 +101,9 @@ export interface FocusHint {
   // um problema da Validação.
   dimensionId?: string;
   criterionId?: string;
+  // Só para problemas de componente de um bloco Entregável (Fase 2.2B.2A) —
+  // mesmo raciocínio de dimensionId/criterionId acima.
+  componentId?: string;
   // Incrementado a cada clique num problema da Validação — permite focar o
   // mesmo campo duas vezes seguidas (ex.: usuário clica, edita errado, clica
   // de novo no mesmo problema).
@@ -453,6 +460,7 @@ function BlockConfigForm({
   const isChecklist = block.type === "checklist";
   const isForm = block.type === "form_briefing";
   const isAnalysis = block.type === "analysis";
+  const isDeliverable = block.type === "deliverable";
 
   const meta = draft.metadata;
   function updateMeta<K extends string>(key: K, value: unknown) {
@@ -1140,6 +1148,170 @@ function BlockConfigForm({
     </CollapsibleFieldGroup>
   );
 
+  // ── Entregável (Fase 2.2B.2A) ───────────────────────────────────────
+  const deliverableIdentificationFields = ["title", "deliverable.objective", "deliverable.deliverableType"];
+  const deliverableIdentification = (
+    <CollapsibleFieldGroup
+      title="Identificação"
+      summary={[draft.title || "Sem nome", meta.deliverableType ? deliverableTypeLabel(meta.deliverableType as string) : null].filter(Boolean).join(" · ")}
+      defaultOpen
+      forceOpen={inSection(deliverableIdentificationFields)}
+      focusNonce={focusHint?.nonce}
+    >
+      {typeField}
+      <div data-field="title">
+        <label className={labelClass}>Nome do entregável</label>
+        <input value={draft.title} onChange={(e) => update("title", e.target.value)} className={inputClass} />
+      </div>
+      <div data-field="deliverable.objective">
+        <label className={labelClass}>Objetivo</label>
+        <textarea value={(meta.objective as string) ?? ""} onChange={(e) => updateMeta("objective", e.target.value)} className={`${textareaBase} min-h-[72px]`} rows={3} />
+      </div>
+      <div>
+        <label className={labelClass}>Descrição</label>
+        <textarea value={draft.description} onChange={(e) => update("description", e.target.value)} className={`${textareaBase} min-h-[80px]`} />
+      </div>
+      <div data-field="deliverable.deliverableType">
+        <label className={labelClass}>Tipo do entregável</label>
+        <select value={(meta.deliverableType as string) ?? ""} onChange={(e) => updateMeta("deliverableType", e.target.value)} className={inputClass}>
+          <option value="">Selecionar</option>
+          {DELIVERABLE_TYPES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const deliverableProduction = (
+    <CollapsibleFieldGroup
+      title="Produção"
+      summary={meta.requiresInternalReview ? "Revisão interna exigida" : "Sem revisão interna exigida"}
+    >
+      <p className="rounded-lg border border-dashed border-os-border bg-os-bg/40 px-3 py-2 text-[11px] leading-snug text-os-muted">
+        Responsáveis, revisores e controle de versão completos chegam numa próxima entrega. Por ora, esta área cobre só observações de produção — a
+        exigência de revisão interna é configurada em &quot;Regras de execução&quot;.
+      </p>
+      <div>
+        <label className={labelClass}>Observações de produção</label>
+        <textarea
+          value={(meta.productionNotes as string) ?? ""}
+          onChange={(e) => updateMeta("productionNotes", e.target.value)}
+          className={`${textareaBase} min-h-[80px]`}
+        />
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const deliverableAdditionalFormats = (meta.additionalFormats as string[] | undefined) ?? [];
+  const deliverableFormatSummary = [
+    meta.primaryFormat ? deliverableFormatLabel(meta.primaryFormat as string) : "Formato principal a definir",
+    deliverableAdditionalFormats.length > 0 ? `+${deliverableAdditionalFormats.length} adicional${deliverableAdditionalFormats.length === 1 ? "" : "is"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const deliverableFormat = (
+    <CollapsibleFieldGroup
+      title="Formato"
+      summary={deliverableFormatSummary}
+      forceOpen={inSection(["deliverable.primaryFormat", "deliverable.additionalFormats"])}
+      focusNonce={focusHint?.nonce}
+    >
+      <div data-field="deliverable.primaryFormat">
+        <label className={labelClass}>Formato principal</label>
+        <select value={(meta.primaryFormat as string) ?? ""} onChange={(e) => updateMeta("primaryFormat", e.target.value)} className={inputClass}>
+          <option value="">Selecionar</option>
+          {DELIVERABLE_FORMATS.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div data-field="deliverable.additionalFormats">
+        <label className={labelClass}>Formatos adicionais {deliverableAdditionalFormats.length > 0 && "(exige múltiplos formatos)"}</label>
+        <div className="flex flex-wrap gap-1.5">
+          {DELIVERABLE_FORMATS.map((f) => {
+            const selected = deliverableAdditionalFormats.includes(f.id);
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  updateMeta("additionalFormats", selected ? deliverableAdditionalFormats.filter((x) => x !== f.id) : [...deliverableAdditionalFormats, f.id]);
+                }}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+                  selected ? "border-os-accent bg-os-accent-soft text-os-accent" : "border-os-border text-os-muted hover:border-os-accent"
+                }`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div>
+        <label className={labelClass}>Orientação de formato</label>
+        <textarea
+          value={(meta.formatGuidance as string) ?? ""}
+          onChange={(e) => updateMeta("formatGuidance", e.target.value)}
+          placeholder="Ex: manter identidade visual da Brain, exportar em alta resolução"
+          className={`${textareaBase} min-h-[72px]`}
+        />
+      </div>
+    </CollapsibleFieldGroup>
+  );
+
+  const deliverableResponsibleSummary = [
+    draft.assigneeType === "papel_padrao" && draft.defaultAssigneeRole
+      ? playbookAssigneeRoleLabel(draft.defaultAssigneeRole)
+      : draft.assigneeType === "usuario_especifico" && draft.defaultAssigneeId
+        ? (assigneeOptions.find((a) => a.id === draft.defaultAssigneeId)?.name ?? "Usuário selecionado")
+        : "A definir ao aplicar",
+    draft.dueOffsetValue != null ? `${draft.dueOffsetValue} ${durationUnitLabel(draft.dueOffsetUnit)}` : "Sem prazo definido",
+  ].join(" · ");
+
+  const deliverableResponsibility = (
+    <CollapsibleFieldGroup
+      title="Responsabilidade e prazo"
+      summary={deliverableResponsibleSummary}
+      forceOpen={inSection(["assignee", "dueOffsetValue"])}
+      focusNonce={focusHint?.nonce}
+    >
+      {internalAssigneeField}
+      {dueAndPriority}
+    </CollapsibleFieldGroup>
+  );
+
+  const deliverableExecutionRules = (
+    <CollapsibleFieldGroup title="Regras de execução" summary={draft.isRequired ? "Obrigatório" : "Opcional"}>
+      {rules}
+      <Switch checked={Boolean(meta.requiresInternalReview)} onChange={(v) => updateMeta("requiresInternalReview", v)} label="Exige revisão interna" />
+      <Switch checked={Boolean(meta.allowsPartialDelivery)} onChange={(v) => updateMeta("allowsPartialDelivery", v)} label="Permite entrega parcial" />
+    </CollapsibleFieldGroup>
+  );
+
+  const deliverableConclusionFields = ["completionCriteria"];
+  const deliverableConclusion = (
+    <CollapsibleFieldGroup
+      title="Conclusão e risco"
+      summary={draft.completionCriteria ? "Critério definido" : "Sem critério de conclusão"}
+      forceOpen={inSection(deliverableConclusionFields)}
+      focusNonce={focusHint?.nonce}
+    >
+      <div data-field="completionCriteria">
+        <label className={labelClass}>Critério de conclusão</label>
+        <textarea value={draft.completionCriteria} onChange={(e) => update("completionCriteria", e.target.value)} className={`${textareaBase} min-h-[96px]`} />
+      </div>
+      {overdueField}
+      <Switch checked={Boolean(meta.notifyAssigneeOnDelay)} onChange={(v) => updateMeta("notifyAssigneeOnDelay", v)} label="Notificar responsável em atraso" />
+      <Switch checked={Boolean(meta.markStageAtRiskOnDelay)} onChange={(v) => updateMeta("markStageAtRiskOnDelay", v)} label="Marcar etapa como em risco" />
+    </CollapsibleFieldGroup>
+  );
+
   // ── Documento ────────────────────────────────────────────────────────
   const documentFileAndResource = (
     <FieldGroup title="Arquivo e recurso">
@@ -1285,6 +1457,17 @@ function BlockConfigForm({
           {analysisResult}
           {analysisExecutionRules}
           {analysisConclusion}
+        </>
+      )}
+
+      {isDeliverable && (
+        <>
+          {deliverableIdentification}
+          {deliverableProduction}
+          {deliverableFormat}
+          {deliverableResponsibility}
+          {deliverableExecutionRules}
+          {deliverableConclusion}
         </>
       )}
 

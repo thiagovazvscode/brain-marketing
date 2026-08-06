@@ -147,7 +147,10 @@ export const PLAYBOOK_BLOCK_TYPES = [
   // agrupação da referência visual do pedido) — Espera/Condição não fazem
   // parte desse grupo, ficam soltos em "futuro".
   { id: "analysis", label: "Análise", active: true, category: "producao_validacao", description: "Avaliação estruturada de dados, processos, evidências e desempenho.", color: "indigo" },
-  { id: "deliverable", label: "Entregável", active: false, category: "producao_validacao", description: "Entrega formal de um resultado ao cliente.", color: "slate" },
+  // Fase 2.2B.2A: Entregável habilitado. Azul profundo ("navy") é uma
+  // identidade nova — não reaproveita "blue" (já usado por Solicitação ao
+  // cliente) nem o verde Brain (reservado a seleção/sucesso/ação principal).
+  { id: "deliverable", label: "Entregável", active: true, category: "producao_validacao", description: "Resultado oficial da operação, composto por componentes, formatos e critérios de conclusão.", color: "navy" },
   { id: "approval", label: "Aprovação", active: false, category: "producao_validacao", description: "Aprovação formal de uma etapa ou entrega.", color: "slate" },
   { id: "milestone", label: "Marco", active: false, category: "producao_validacao", description: "Marco de referência na linha do tempo do playbook.", color: "slate" },
   { id: "wait", label: "Espera", active: false, category: "futuro", description: "Período de espera antes de seguir para o próximo bloco.", color: "slate" },
@@ -711,6 +714,140 @@ export const isActivePlaybookBlockType = (id: string): boolean =>
   PLAYBOOK_BLOCK_TYPES.some((s) => s.id === id && s.active);
 export const isValidDueOffsetAnchor = (id: string): id is DueOffsetAnchorId => DUE_OFFSET_ANCHORS.some((s) => s.id === id);
 export const isValidOverdueAction = (id: string): id is OverdueActionId => OVERDUE_ACTIONS.some((s) => s.id === id);
+
+// ── Fase 2.2B.2A — Entregável ────────────────────────────────────────────
+// deliverableType/primaryFormat/additionalFormats vivem em
+// playbook_block_templates.metadata (mesmo raciocínio de analysisType/
+// documentKind — texto validado em app, lista que tende a crescer, sem
+// tabela/coluna própria). componentType/expectedFormat, por outro lado, são
+// colunas reais de playbook_deliverable_components e por isso são enum do
+// banco (deliverable_component_type/deliverable_component_format,
+// aplicados na Fase 2.2B.2A) — as listas abaixo espelham exatamente esses
+// dois enums, mesmo padrão de ANALYSIS_EVALUATION_TYPES espelhando
+// analysis_evaluation_type.
+export const DELIVERABLE_TYPES = [
+  { id: "plano_de_acao", label: "Plano de ação" },
+  { id: "diagnostico", label: "Diagnóstico" },
+  { id: "relatorio", label: "Relatório" },
+  { id: "apresentacao", label: "Apresentação" },
+  { id: "estrategia", label: "Estratégia" },
+  { id: "campanha", label: "Campanha" },
+  { id: "pagina", label: "Página" },
+  { id: "video", label: "Vídeo" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "sistema", label: "Sistema" },
+  { id: "personalizado", label: "Entregável personalizado" },
+] as const;
+
+export const DELIVERABLE_FORMATS = [
+  { id: "pdf", label: "PDF" },
+  { id: "apresentacao", label: "Apresentação" },
+  { id: "documento", label: "Documento" },
+  { id: "planilha", label: "Planilha" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "pagina", label: "Página" },
+  { id: "video", label: "Vídeo" },
+  { id: "arquivo_digital", label: "Arquivo digital" },
+  { id: "sistema", label: "Sistema" },
+  { id: "multiplos_formatos", label: "Múltiplos formatos" },
+  { id: "outro", label: "Outro" },
+] as const;
+
+// Espelha o enum do banco deliverable_component_type (10 valores fixos da
+// migration da Fase 2.2B.2A) — só pra label/opções no frontend e validação
+// de app; o enum do banco (NOT NULL, sem default) é a garantia real.
+export const DELIVERABLE_COMPONENT_TYPES = [
+  { id: "section", label: "Seção" },
+  { id: "document", label: "Documento" },
+  { id: "presentation", label: "Apresentação" },
+  { id: "spreadsheet", label: "Planilha" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "page", label: "Página" },
+  { id: "video", label: "Vídeo" },
+  { id: "file", label: "Arquivo" },
+  { id: "system", label: "Sistema" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliverableComponentTypeId = (typeof DELIVERABLE_COMPONENT_TYPES)[number]["id"];
+
+// Espelha deliverable_component_format (11 valores fixos).
+export const DELIVERABLE_COMPONENT_FORMATS = [
+  { id: "pdf", label: "PDF" },
+  { id: "presentation", label: "Apresentação" },
+  { id: "document", label: "Documento" },
+  { id: "spreadsheet", label: "Planilha" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "page", label: "Página" },
+  { id: "video", label: "Vídeo" },
+  { id: "digital_file", label: "Arquivo digital" },
+  { id: "system", label: "Sistema" },
+  { id: "multiple", label: "Múltiplos formatos" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliverableComponentFormatId = (typeof DELIVERABLE_COMPONENT_FORMATS)[number]["id"];
+
+// Limite defensivo (item 8/24 do pedido da Fase 2.2B.2A) — nunca confiar só no frontend.
+export const MAX_DELIVERABLE_COMPONENTS_PER_BLOCK = 50;
+
+export const deliverableTypeLabel = (id: string | null) => labelOf(DELIVERABLE_TYPES, id);
+export const deliverableFormatLabel = (id: string | null) => labelOf(DELIVERABLE_FORMATS, id);
+export const deliverableComponentTypeLabel = (id: string | null) => labelOf(DELIVERABLE_COMPONENT_TYPES, id);
+export const deliverableComponentFormatLabel = (id: string | null) => labelOf(DELIVERABLE_COMPONENT_FORMATS, id);
+
+export const isValidDeliverableType = (id: string) => DELIVERABLE_TYPES.some((s) => s.id === id);
+export const isValidDeliverableFormat = (id: string) => DELIVERABLE_FORMATS.some((s) => s.id === id);
+export const isValidDeliverableComponentType = (id: string): id is DeliverableComponentTypeId =>
+  DELIVERABLE_COMPONENT_TYPES.some((s) => s.id === id);
+export const isValidDeliverableComponentFormat = (id: string): id is DeliverableComponentFormatId =>
+  DELIVERABLE_COMPONENT_FORMATS.some((s) => s.id === id);
+
+/** metadata de Entregável — mesmo raciocínio de sanitizeAnalysisMetadata/sanitizeMeetingMetadata. */
+export function sanitizeDeliverableMetadata(input: unknown): { metadata: Record<string, unknown> } | { error: string } {
+  if (input === undefined || input === null) return { metadata: {} };
+  if (typeof input !== "object") return { error: "Configuração do entregável inválida." };
+  const src = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if (src.deliverableType !== undefined) {
+    if (typeof src.deliverableType !== "string" || !isValidDeliverableType(src.deliverableType)) return { error: "Tipo de entregável inválido." };
+    out.deliverableType = src.deliverableType;
+  }
+  if (src.primaryFormat !== undefined) {
+    if (typeof src.primaryFormat !== "string" || !isValidDeliverableFormat(src.primaryFormat)) return { error: "Formato principal inválido." };
+    out.primaryFormat = src.primaryFormat;
+  }
+  if (src.additionalFormats !== undefined) {
+    if (!Array.isArray(src.additionalFormats)) return { error: "Formatos adicionais inválidos." };
+    const formats = src.additionalFormats.filter((f): f is string => typeof f === "string");
+    if (formats.some((f) => !isValidDeliverableFormat(f))) return { error: "Um dos formatos adicionais é inválido." };
+    out.additionalFormats = formats;
+  }
+  if (src.objective !== undefined) {
+    if (typeof src.objective !== "string") return { error: "Objetivo inválido." };
+    out.objective = src.objective.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.requiresInternalReview !== undefined) out.requiresInternalReview = Boolean(src.requiresInternalReview);
+  if (src.allowsPartialDelivery !== undefined) out.allowsPartialDelivery = Boolean(src.allowsPartialDelivery);
+  if (src.productionNotes !== undefined) {
+    if (typeof src.productionNotes !== "string") return { error: "Observações de produção inválidas." };
+    out.productionNotes = src.productionNotes.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.formatGuidance !== undefined) {
+    if (typeof src.formatGuidance !== "string") return { error: "Orientação de formato inválida." };
+    out.formatGuidance = src.formatGuidance.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  // Complementares ao overdueAction genérico do bloco (que já cobre
+  // "notificar responsável"/"marcar em risco" como 2 de suas 4 opções
+  // mutuamente exclusivas) — pedido explícito da Fase 2.2B.2A pede os dois
+  // como toggles independentes específicos do Entregável, não como
+  // substituto do seletor genérico.
+  if (src.notifyAssigneeOnDelay !== undefined) out.notifyAssigneeOnDelay = Boolean(src.notifyAssigneeOnDelay);
+  if (src.markStageAtRiskOnDelay !== undefined) out.markStageAtRiskOnDelay = Boolean(src.markStageAtRiskOnDelay);
+
+  return { metadata: out };
+}
 
 export type StageConfigStatus = "completa" | "incompleta" | "alerta" | "sem_configuracao";
 

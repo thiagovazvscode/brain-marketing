@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { playbookVersions } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getStagesWithBlocks } from "@/lib/playbook-builder";
-import { isValidAnalysisEvaluationType, analysisRequiresEvidence } from "@/lib/methods";
+import { isValidAnalysisEvaluationType, analysisRequiresEvidence, isValidDeliverableComponentType, isValidDeliverableComponentFormat } from "@/lib/methods";
 import type { ValidationIssue } from "@/types/methods";
 
 // Validação mínima da Fase 2.1 (§ do pedido). Único erro crítico nesta
@@ -380,6 +380,101 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         }
         if (!meta.analyzedPeriod) {
           rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "analysis.analyzedPeriod", code: "analysis.period.missing", message: `Análise "${block.title}" sem período analisado definido.` });
+        }
+      }
+
+      if (block.type === "deliverable") {
+        if (!meta.objective) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.objective", code: "deliverable.objective.missing", message: `Entregável "${block.title}" sem objetivo.` });
+          blockOk = false;
+        }
+        if (!meta.deliverableType) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.deliverableType", code: "deliverable.type.missing", message: `Entregável "${block.title}" sem tipo definido.` });
+          blockOk = false;
+        }
+        if (!meta.primaryFormat) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.primaryFormat", code: "deliverable.format.missing", message: `Entregável "${block.title}" sem formato principal.` });
+          blockOk = false;
+        }
+        if (block.deliverableComponents.length === 0) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.components", code: "deliverable.components.empty", message: `Entregável "${block.title}" sem componentes.` });
+          blockOk = false;
+        }
+        if (!block.completionCriteria?.trim()) {
+          rawIssues.push({ severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, field: "completionCriteria", code: "deliverable.completionCriteria.missing", message: `Entregável "${block.title}" sem critério de conclusão.` });
+          blockOk = false;
+        }
+
+        const activeComponents = block.deliverableComponents.filter((c) => c.isActive);
+        if (activeComponents.length > 0 && !activeComponents.some((c) => c.isRequired)) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.components", code: "deliverable.components.noRequired", message: `Entregável "${block.title}" não tem nenhum componente obrigatório.` });
+        }
+        if (!meta.requiresInternalReview) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.requiresInternalReview", code: "deliverable.review.none", message: `Entregável "${block.title}" não exige revisão interna.` });
+        }
+        if (!(meta.additionalFormats as string[] | undefined)?.length) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "deliverable.additionalFormats", code: "deliverable.additionalFormats.none", message: `Entregável "${block.title}" sem formatos adicionais.` });
+        }
+        if (block.dueOffsetValue == null) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, field: "dueOffsetValue", code: "deliverable.due.missing", message: `Entregável "${block.title}" sem prazo definido.` });
+        }
+
+        for (const component of block.deliverableComponents) {
+          if (component.isRequired && !component.title.trim()) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+              field: "deliverable.component.title", code: "deliverable.component.titleMissing",
+              message: `Um componente obrigatório do entregável "${block.title}" está sem título.`,
+            });
+            blockOk = false;
+          }
+          if (!isValidDeliverableComponentType(component.componentType)) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+              field: "deliverable.component.type", code: "deliverable.component.typeInvalid",
+              message: `Componente "${component.title}" tem tipo inválido.`,
+            });
+            blockOk = false;
+          }
+          if (!isValidDeliverableComponentFormat(component.expectedFormat)) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+              field: "deliverable.component.format", code: "deliverable.component.formatInvalid",
+              message: `Componente "${component.title}" tem formato esperado inválido.`,
+            });
+            blockOk = false;
+          }
+          if (component.isRequired) {
+            if (component.defaultAssigneeType === "papel_padrao" && !component.defaultAssigneeRole?.trim()) {
+              rawIssues.push({
+                severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+                field: "deliverable.component.assignee", code: "deliverable.component.assignee.roleMissing",
+                message: `Componente obrigatório "${component.title}" está com "Papel padrão" selecionado mas sem papel definido.`,
+              });
+              blockOk = false;
+            } else if (component.defaultAssigneeType === "usuario_especifico" && !component.defaultAssigneeId) {
+              rawIssues.push({
+                severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+                field: "deliverable.component.assignee", code: "deliverable.component.assignee.userMissing",
+                message: `Componente obrigatório "${component.title}" está com "Usuário específico" selecionado mas sem usuário definido.`,
+              });
+              blockOk = false;
+            }
+          }
+          if (!component.description?.trim()) {
+            rawIssues.push({
+              severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+              field: "deliverable.component.description", code: "deliverable.component.description.none",
+              message: `Componente "${component.title}" sem descrição.`,
+            });
+          }
+          if (!component.acceptanceCriteria?.trim()) {
+            rawIssues.push({
+              severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, componentId: component.id,
+              field: "deliverable.component.acceptanceCriteria", code: "deliverable.component.acceptanceCriteria.none",
+              message: `Componente "${component.title}" sem critério de aceite.`,
+            });
+          }
         }
       }
 

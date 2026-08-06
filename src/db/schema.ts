@@ -886,3 +886,72 @@ export const playbookAnalysisCriteria = pgTable(
     check("playbook_analysis_criteria_position_non_negative", sql`${table.position} >= 0`),
   ]
 );
+
+// Componente de um bloco Entregável (Fase 2.2B.2A). Mesmo raciocínio de
+// cascade de playbookAnalysisDimensions: blockId em cascade, apagar o bloco
+// apaga os componentes junto. component_type/expected_format são NOT NULL
+// SEM default de propósito — são informação estrutural obrigatória definida
+// no modal de criação; se a API deixar de enviar um dos dois por erro, o
+// banco rejeita o INSERT em vez de assumir "section"/"other" silenciosamente
+// (correção pós-gate da Fase 2.2B.2A). defaultAssigneeType/Role/Id repetem o
+// mesmo padrão de 3 modalidades de playbookBlockTemplates — não são uma
+// referência ao responsável do bloco-pai porque um componente pode ter
+// responsável próprio, independente do responsável geral do Entregável;
+// reaproveita o enum playbookBlockAssigneeTypeEnum já existente (mesmo
+// conjunto de 3 valores), sem criar um novo. Sem CHECK combinando os 3
+// campos de responsável de propósito — a combinação válida (papel_padrao
+// exige role e role nulo pros outros dois, etc.) é responsabilidade da API e
+// da validação de publicação, não do schema, pra não travar autosave parcial
+// em rascunho.
+export const deliverableComponentTypeEnum = pgEnum("deliverable_component_type", [
+  "section",
+  "document",
+  "presentation",
+  "spreadsheet",
+  "dashboard",
+  "page",
+  "video",
+  "file",
+  "system",
+  "other",
+]);
+
+export const deliverableComponentFormatEnum = pgEnum("deliverable_component_format", [
+  "pdf",
+  "presentation",
+  "document",
+  "spreadsheet",
+  "dashboard",
+  "page",
+  "video",
+  "digital_file",
+  "system",
+  "multiple",
+  "other",
+]);
+
+export const playbookDeliverableComponents = pgTable(
+  "playbook_deliverable_components",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    componentType: deliverableComponentTypeEnum("component_type").notNull(),
+    expectedFormat: deliverableComponentFormatEnum("expected_format").notNull(),
+    isRequired: boolean("is_required").notNull().default(true),
+    defaultAssigneeType: playbookBlockAssigneeTypeEnum("default_assignee_type").notNull().default("definir_ao_aplicar"),
+    defaultAssigneeRole: text("default_assignee_role"),
+    defaultAssigneeId: uuid("default_assignee_id").references(() => adminUsers.id),
+    acceptanceCriteria: text("acceptance_criteria"),
+    position: integer("position").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("playbook_deliverable_components_block_position_idx").on(table.blockId, table.position),
+    index("playbook_deliverable_components_default_assignee_idx").on(table.defaultAssigneeId),
+    check("playbook_deliverable_components_position_non_negative", sql`${table.position} >= 0`),
+  ]
+);

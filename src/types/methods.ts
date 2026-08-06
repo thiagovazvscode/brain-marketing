@@ -257,6 +257,37 @@ export interface PlaybookAnalysisDimensionRow {
   criteria: PlaybookAnalysisCriterionRow[];
 }
 
+export interface DeliverableBlockMetadata {
+  deliverableType?: string;
+  primaryFormat?: string;
+  additionalFormats?: string[];
+  objective?: string;
+  requiresInternalReview?: boolean;
+  allowsPartialDelivery?: boolean;
+  productionNotes?: string;
+  formatGuidance?: string;
+  notifyAssigneeOnDelay?: boolean;
+  markStageAtRiskOnDelay?: boolean;
+}
+
+export interface PlaybookDeliverableComponentRow {
+  id: string;
+  blockId: string;
+  title: string;
+  description: string | null;
+  componentType: string;
+  expectedFormat: string;
+  isRequired: boolean;
+  defaultAssigneeType: string;
+  defaultAssigneeRole: string | null;
+  defaultAssigneeId: string | null;
+  acceptanceCriteria: string | null;
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PlaybookChecklistItemRow {
   id: string;
   blockId: string;
@@ -320,6 +351,7 @@ export interface PlaybookBlockRow {
   checklistItems: PlaybookChecklistItemRow[];
   formQuestions: PlaybookFormQuestionRow[];
   analysisDimensions: PlaybookAnalysisDimensionRow[];
+  deliverableComponents: PlaybookDeliverableComponentRow[];
   createdAt: string;
   updatedAt: string;
 }
@@ -379,6 +411,9 @@ export interface ValidationIssue {
   // navegação (expandir a dimensão/critério certo ao clicar no problema).
   dimensionId?: string;
   criterionId?: string;
+  // Só para problemas de componente de um bloco Entregável (Fase 2.2B.2A) —
+  // mesmo raciocínio de dimensionId/criterionId acima.
+  componentId?: string;
   message: string;
   // Chave estável (não a mensagem, que é texto livre) usada só pelo client
   // pra abrir a seção certa do painel e focar o campo problemático ao

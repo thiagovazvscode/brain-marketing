@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FocusHint } from "@/components/admin/PlaybookConfigPanel";
-import { ArrowLeft, BarChart3, GripVertical, MoreVertical, Plus, Send, ClipboardList, Lock, Users, FileText, Upload } from "lucide-react";
+import { ArrowLeft, BarChart3, GripVertical, MoreVertical, Package, Plus, Send, ClipboardList, Lock, Users, FileText, Upload } from "lucide-react";
 import type {
   PlaybookAnalysisCriterionRow,
   PlaybookAnalysisDimensionRow,
   PlaybookChecklistItemRow,
+  PlaybookDeliverableComponentRow,
   PlaybookFormQuestionRow,
   PlaybookStageRow,
   PlaybookBlockRow,
@@ -14,6 +15,7 @@ import type {
   SimpleOption,
 } from "@/types/methods";
 import {
+  deliverableFormatLabel,
   documentKindLabel,
   documentOriginLabel,
   durationUnitLabel,
@@ -28,6 +30,7 @@ import { EmptyBlocksPlaceholder } from "@/components/admin/EmptyBlocksPlaceholde
 import { ChecklistBuilder } from "@/components/admin/blocks/ChecklistBuilder";
 import { FormBuilder } from "@/components/admin/blocks/FormBuilder";
 import { AnalysisBuilder } from "@/components/admin/blocks/AnalysisBuilder";
+import { DeliverableBuilder } from "@/components/admin/blocks/DeliverableBuilder";
 
 // Cor discreta por tipo — só em ícone/badge/marca lateral (regra do pedido:
 // verde da Brain fica exclusivo de seleção/sucesso).
@@ -41,6 +44,9 @@ const TYPE_STYLE: Record<string, { badge: string; chip: string }> = {
   // Azul-violeta (indigo) discreto — item 1/13 do pedido: nunca usar o verde
   // Brain (reservado a seleção/sucesso) como cor de tipo.
   analysis: { badge: "bg-indigo-100 text-indigo-700", chip: "bg-indigo-100 text-indigo-600" },
+  // Azul profundo (Fase 2.2B.2A) — identidade própria do Entregável, nunca o
+  // verde Brain nem o "blue" já usado por Solicitação ao cliente.
+  deliverable: { badge: "bg-blue-200 text-blue-900", chip: "bg-blue-200 text-blue-900" },
 };
 
 const TYPE_ICON: Record<string, typeof ClipboardList> = {
@@ -51,6 +57,7 @@ const TYPE_ICON: Record<string, typeof ClipboardList> = {
   form_briefing: FileText,
   document: Upload,
   analysis: BarChart3,
+  deliverable: Package,
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -102,6 +109,11 @@ function typeSummary(block: PlaybookBlockRow): string {
   if (block.type === "analysis") {
     const criteriaCount = block.analysisDimensions.reduce((sum, d) => sum + d.criteria.length, 0);
     return ` • ${block.analysisDimensions.length} ${block.analysisDimensions.length === 1 ? "dimensão" : "dimensões"} • ${criteriaCount} ${criteriaCount === 1 ? "critério" : "critérios"}`;
+  }
+  if (block.type === "deliverable") {
+    const count = block.deliverableComponents.length;
+    const primaryFormat = meta.primaryFormat ? deliverableFormatLabel(meta.primaryFormat as string) : null;
+    return ` • ${count} ${count === 1 ? "componente" : "componentes"}${primaryFormat ? ` • ${primaryFormat}` : ""}`;
   }
   if (block.type === "document") {
     const parts: string[] = [];
@@ -258,6 +270,12 @@ export function PlaybookStageContent({
   onDeleteCriterion,
   onReorderCriteria,
   analysisCriterionError,
+  onCreateDeliverableComponent,
+  onUpdateDeliverableComponent,
+  onDuplicateDeliverableComponent,
+  onDeleteDeliverableComponent,
+  onReorderDeliverableComponents,
+  deliverableComponentError,
   onUpdateBlockMetadata,
   resourceOptions,
   onBack,
@@ -295,6 +313,12 @@ export function PlaybookStageContent({
   onDeleteCriterion: (blockId: string, dimensionId: string, criterionId: string) => void;
   onReorderCriteria: (blockId: string, dimensionId: string, orderedIds: string[]) => void;
   analysisCriterionError?: string | null;
+  onCreateDeliverableComponent: (blockId: string, title: string, componentType: string, expectedFormat: string) => void;
+  onUpdateDeliverableComponent: (blockId: string, componentId: string, patch: Record<string, unknown>) => void;
+  onDuplicateDeliverableComponent: (blockId: string, component: PlaybookDeliverableComponentRow) => void;
+  onDeleteDeliverableComponent: (blockId: string, componentId: string) => void;
+  onReorderDeliverableComponents: (blockId: string, orderedIds: string[]) => void;
+  deliverableComponentError?: string | null;
   onUpdateBlockMetadata: (blockId: string, patch: Record<string, unknown>) => void;
   resourceOptions: PlaybookResourceOption[];
   onBack: () => void;
@@ -304,9 +328,11 @@ export function PlaybookStageContent({
   const checklistRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const analysisRef = useRef<HTMLDivElement>(null);
+  const deliverableRef = useRef<HTMLDivElement>(null);
   useBuilderFocus(checklistRef, focusHint?.field === "checklist.items", focusHint?.nonce);
   useBuilderFocus(formRef, focusHint?.field === "form.questions", focusHint?.nonce);
   useBuilderFocus(analysisRef, Boolean(focusHint?.field?.startsWith("analysis.")), focusHint?.nonce);
+  useBuilderFocus(deliverableRef, Boolean(focusHint?.field?.startsWith("deliverable.")), focusHint?.nonce);
 
   if (!stage) {
     return (
@@ -400,6 +426,25 @@ export function PlaybookStageContent({
           onDeleteCriterion={(dimensionId, criterionId) => onDeleteCriterion(selectedBlock.id, dimensionId, criterionId)}
           onReorderCriteria={(dimensionId, orderedIds) => onReorderCriteria(selectedBlock.id, dimensionId, orderedIds)}
           onUpdateMetadata={(patch) => onUpdateBlockMetadata(selectedBlock.id, patch)}
+          focusHint={focusHint}
+        />
+      </div>
+    );
+  }
+  if (selectedBlock?.type === "deliverable") {
+    return (
+      <div ref={deliverableRef} className="min-w-0 flex-1 space-y-3 rounded-2xl">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs font-bold text-os-muted hover:text-os-ink">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para blocos
+        </button>
+        <DeliverableBuilder
+          block={selectedBlock}
+          componentError={deliverableComponentError}
+          onCreateComponent={(title, componentType, expectedFormat) => onCreateDeliverableComponent(selectedBlock.id, title, componentType, expectedFormat)}
+          onUpdateComponent={(componentId, patch) => onUpdateDeliverableComponent(selectedBlock.id, componentId, patch)}
+          onDuplicateComponent={(component) => onDuplicateDeliverableComponent(selectedBlock.id, component)}
+          onDeleteComponent={(componentId) => onDeleteDeliverableComponent(selectedBlock.id, componentId)}
+          onReorderComponents={(orderedIds) => onReorderDeliverableComponents(selectedBlock.id, orderedIds)}
           focusHint={focusHint}
         />
       </div>

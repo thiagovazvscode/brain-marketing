@@ -7,6 +7,7 @@ import type {
   PlaybookAnalysisCriterionRow,
   PlaybookAnalysisDimensionRow,
   PlaybookChecklistItemRow,
+  PlaybookDeliverableComponentRow,
   PlaybookEditorData,
   PlaybookFormQuestionRow,
   PlaybookStageRow,
@@ -52,7 +53,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showStageForm, setShowStageForm] = useState(false);
   const [blockPickerStageId, setBlockPickerStageId] = useState<string | null>(null);
-  const [newBlockType, setNewBlockType] = useState<"meeting" | "checklist" | "form_briefing" | "document" | "analysis" | null>(null);
+  const [newBlockType, setNewBlockType] = useState<"meeting" | "checklist" | "form_briefing" | "document" | "analysis" | "deliverable" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
@@ -62,6 +63,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [configOpen, setConfigOpen] = useState(false);
   const [formQuestionError, setFormQuestionError] = useState<string | null>(null);
   const [analysisCriterionError, setAnalysisCriterionError] = useState<string | null>(null);
+  const [deliverableComponentError, setDeliverableComponentError] = useState<string | null>(null);
   const [focusHint, setFocusHint] = useState<FocusHint | null>(null);
   // Token por alvo de reorder (blockId p/ dimensões, dimensionId p/ critérios)
   // — incrementado a cada drag solto. Uma resposta (sucesso ou falha) só
@@ -176,7 +178,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
 
   async function createRichBlock(
     stageId: string,
-    type: "meeting" | "checklist" | "form_briefing" | "document" | "analysis",
+    type: "meeting" | "checklist" | "form_briefing" | "document" | "analysis" | "deliverable",
     payload: {
       title: string;
       metadata?: Record<string, unknown>;
@@ -611,6 +613,115 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
     }
   }
 
+  // ── Componentes de Entregável (Fase 2.2B.2A) ─────────────────────────
+  async function createDeliverableComponent(stageId: string, blockId: string, title: string, componentType: string, expectedFormat: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components`, {
+        method: "POST",
+        body: JSON.stringify({ title, componentType, expectedFormat }),
+      });
+      setDeliverableComponentError(null);
+      await refetch();
+    } catch (e) {
+      setDeliverableComponentError(e instanceof Error ? e.message : "Não foi possível criar o componente.");
+    }
+  }
+
+  async function updateDeliverableComponent(stageId: string, blockId: string, componentId: string, patch: Record<string, unknown>) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components/${componentId}`, { method: "PATCH", body: JSON.stringify(patch) });
+      setDeliverableComponentError(null);
+      await refetch();
+    } catch (e) {
+      setDeliverableComponentError(e instanceof Error ? e.message : "Não foi possível atualizar o componente.");
+    }
+  }
+
+  // Duplicar reaproveita o mesmo endpoint de criação com os campos
+  // essenciais copiados, depois um PATCH pros demais campos — mesmo padrão
+  // já usado por duplicateDimension/duplicateCriterion (Análise): o projeto
+  // não tem endpoint dedicado de duplicação abaixo do nível de bloco.
+  async function duplicateDeliverableComponent(stageId: string, blockId: string, component: PlaybookDeliverableComponentRow) {
+    try {
+      const { component: created } = await api<{ component: { id: string } }>(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: `${component.title} (cópia)`,
+          componentType: component.componentType,
+          expectedFormat: component.expectedFormat,
+          description: component.description ?? undefined,
+        }),
+      });
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components/${created.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          isRequired: component.isRequired,
+          defaultAssigneeType: component.defaultAssigneeType,
+          defaultAssigneeRole: component.defaultAssigneeRole ?? undefined,
+          defaultAssigneeId: component.defaultAssigneeId ?? undefined,
+          acceptanceCriteria: component.acceptanceCriteria ?? undefined,
+        }),
+      });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível duplicar o componente.");
+    }
+  }
+
+  async function deleteDeliverableComponent(stageId: string, blockId: string, componentId: string) {
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components/${componentId}`, { method: "DELETE" });
+      await refetch();
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir o componente.");
+    }
+  }
+
+  // Mesmo raciocínio de applyDimensionOrder — reordena localmente sem tocar
+  // em nenhum outro campo, preserva seleção e drafts locais de outros
+  // componentes (tudo segue por `key={id}`, não por índice).
+  function applyDeliverableComponentOrder(stageId: string, blockId: string, orderedIds: string[]) {
+    setStages((cur) =>
+      cur.map((s) => {
+        if (s.id !== stageId) return s;
+        return {
+          ...s,
+          blocks: s.blocks.map((b) => {
+            if (b.id !== blockId) return b;
+            const byId = new Map(b.deliverableComponents.map((c) => [c.id, c]));
+            const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, position: index }));
+            return { ...b, deliverableComponents: reordered };
+          }),
+        };
+      })
+    );
+  }
+
+  // Otimista, mesmo mecanismo (token incremental) de reorderDimensions —
+  // aplica a ordem local no mesmo tick do drop, persiste em segundo plano, e
+  // uma resposta (sucesso ou falha) só mexe no estado se ainda for a
+  // tentativa mais recente pra este bloco.
+  async function reorderDeliverableComponents(stageId: string, blockId: string, orderedIds: string[]) {
+    const block = stages.find((s) => s.id === stageId)?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const previousOrder = block.deliverableComponents.map((c) => c.id);
+    const key = `deliverable-components:${blockId}`;
+    const token = (reorderTokenRef.current[key] ?? 0) + 1;
+    reorderTokenRef.current[key] = token;
+
+    applyDeliverableComponentOrder(stageId, blockId, orderedIds);
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-components/reorder`, { method: "POST", body: JSON.stringify({ orderedIds }) });
+      if (reorderTokenRef.current[key] !== token) return;
+      setSaveState("saved");
+    } catch {
+      if (reorderTokenRef.current[key] !== token) return;
+      applyDeliverableComponentOrder(stageId, blockId, previousOrder);
+      reportError("Não foi possível salvar a nova ordem.");
+    }
+  }
+
   // ── Autosave (config panel) ──────────────────────────────────────────
   async function saveStage(stageId: string, patch: Record<string, unknown>) {
     const { stage } = await api<{ stage: PlaybookStageRow }>(`${base}/stages/${stageId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -736,6 +847,14 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             onDeleteCriterion={(blockId, dimensionId, criterionId) => selectedStage && deleteCriterion(selectedStage.id, blockId, dimensionId, criterionId)}
             onReorderCriteria={(blockId, dimensionId, orderedIds) => selectedStage && reorderCriteria(selectedStage.id, blockId, dimensionId, orderedIds)}
             analysisCriterionError={analysisCriterionError}
+            onCreateDeliverableComponent={(blockId, title, componentType, expectedFormat) =>
+              selectedStage && createDeliverableComponent(selectedStage.id, blockId, title, componentType, expectedFormat)
+            }
+            onUpdateDeliverableComponent={(blockId, componentId, patch) => selectedStage && updateDeliverableComponent(selectedStage.id, blockId, componentId, patch)}
+            onDuplicateDeliverableComponent={(blockId, component) => selectedStage && duplicateDeliverableComponent(selectedStage.id, blockId, component)}
+            onDeleteDeliverableComponent={(blockId, componentId) => selectedStage && deleteDeliverableComponent(selectedStage.id, blockId, componentId)}
+            onReorderDeliverableComponents={(blockId, orderedIds) => selectedStage && reorderDeliverableComponents(selectedStage.id, blockId, orderedIds)}
+            deliverableComponentError={deliverableComponentError}
             onUpdateBlockMetadata={(blockId, patch) => selectedStage && updateBlockMetadata(selectedStage.id, blockId, patch)}
             resourceOptions={initialData.resources}
             focusHint={focusHint}
@@ -848,7 +967,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             setSelection(issue.blockId ? { kind: "block", stageId, blockId: issue.blockId } : { kind: "stage", stageId });
             setConfigOpen(true);
             setShowValidation(false);
-            setFocusHint({ field: issue.field, dimensionId: issue.dimensionId, criterionId: issue.criterionId, nonce: Date.now() });
+            setFocusHint({ field: issue.field, dimensionId: issue.dimensionId, criterionId: issue.criterionId, componentId: issue.componentId, nonce: Date.now() });
           }}
           onClose={() => setShowValidation(false)}
         />

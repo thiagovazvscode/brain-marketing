@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { playbookBlockTemplates, playbookChecklistItems, playbookFormQuestions, playbookAnalysisDimensions, playbookAnalysisCriteria } from "@/db/schema";
+import {
+  playbookBlockTemplates,
+  playbookChecklistItems,
+  playbookFormQuestions,
+  playbookAnalysisDimensions,
+  playbookAnalysisCriteria,
+  playbookDeliverableComponents,
+} from "@/db/schema";
 import { loadBlockInStage } from "@/lib/playbook-builder";
 
 export async function POST(
@@ -140,6 +147,35 @@ export async function POST(
             }))
           );
         }
+      }
+    }
+
+    // Entregável (Fase 2.2B.2A): componentes são filhos do bloco, clonam
+    // junto com IDs novos — mesmo raciocínio de checklist/formulário/análise
+    // acima.
+    if (original.type === "deliverable") {
+      const components = await db
+        .select()
+        .from(playbookDeliverableComponents)
+        .where(eq(playbookDeliverableComponents.blockId, blockId))
+        .orderBy(asc(playbookDeliverableComponents.position));
+      if (components.length > 0) {
+        await db.insert(playbookDeliverableComponents).values(
+          components.map((c) => ({
+            blockId: copy.id,
+            title: c.title,
+            description: c.description,
+            componentType: c.componentType,
+            expectedFormat: c.expectedFormat,
+            isRequired: c.isRequired,
+            defaultAssigneeType: c.defaultAssigneeType,
+            defaultAssigneeRole: c.defaultAssigneeRole,
+            defaultAssigneeId: c.defaultAssigneeId,
+            acceptanceCriteria: c.acceptanceCriteria,
+            position: c.position,
+            isActive: c.isActive,
+          }))
+        );
       }
     }
 

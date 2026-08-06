@@ -13,6 +13,7 @@ import {
   isValidPlaybookBlockPriority,
   isValidPlaybookBlockType,
   sanitizeAnalysisMetadata,
+  sanitizeDeliverableMetadata,
   sanitizeDocumentMetadata,
   sanitizeMeetingMetadata,
 } from "@/lib/methods";
@@ -64,6 +65,10 @@ async function resolveMetadataPatch(
   }
   if (type === "analysis") {
     const result = sanitizeAnalysisMetadata(raw);
+    return "error" in result ? result : { metadata: result.metadata };
+  }
+  if (type === "deliverable") {
+    const result = sanitizeDeliverableMetadata(raw);
     return "error" in result ? result : { metadata: result.metadata };
   }
   return { metadata: null };

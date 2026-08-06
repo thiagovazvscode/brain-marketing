@@ -16,6 +16,7 @@ import {
   playbookFormQuestions,
   playbookAnalysisDimensions,
   playbookAnalysisCriteria,
+  playbookDeliverableComponents,
 } from "@/db/schema";
 import { bumpVersion, computeVersionTransition } from "@/lib/methods";
 
@@ -155,6 +156,28 @@ async function cloneStagesAndBlocks(sourceVersionId: string, targetVersionId: st
             }))
           );
         }
+      }
+
+      // Componentes de um bloco Entregável (Fase 2.2B.2A) — mesmo
+      // raciocínio de checklistItems/formQuestions/analysisDimensions: IDs
+      // novos, nunca compartilhados entre versões.
+      if (block.deliverableComponents.length > 0) {
+        await db.insert(playbookDeliverableComponents).values(
+          block.deliverableComponents.map((c) => ({
+            blockId: newBlock.id,
+            title: c.title,
+            description: c.description,
+            componentType: c.componentType as never,
+            expectedFormat: c.expectedFormat as never,
+            isRequired: c.isRequired,
+            defaultAssigneeType: c.defaultAssigneeType as never,
+            defaultAssigneeRole: c.defaultAssigneeRole,
+            defaultAssigneeId: c.defaultAssigneeId,
+            acceptanceCriteria: c.acceptanceCriteria,
+            position: c.position,
+            isActive: c.isActive,
+          }))
+        );
       }
     }
 
@@ -353,9 +376,9 @@ export async function getStagesWithBlocks(versionId: string) {
   ]);
 
   const blockIds = blocks.map((b) => b.id);
-  const [checklistItems, formQuestions, dimensions] =
+  const [checklistItems, formQuestions, dimensions, deliverableComponents] =
     blockIds.length === 0
-      ? [[], [], []]
+      ? [[], [], [], []]
       : await Promise.all([
           db
             .select()
@@ -372,6 +395,11 @@ export async function getStagesWithBlocks(versionId: string) {
             .from(playbookAnalysisDimensions)
             .where(inArray(playbookAnalysisDimensions.blockId, blockIds))
             .orderBy(asc(playbookAnalysisDimensions.position)),
+          db
+            .select()
+            .from(playbookDeliverableComponents)
+            .where(inArray(playbookDeliverableComponents.blockId, blockIds))
+            .orderBy(asc(playbookDeliverableComponents.position)),
         ]);
 
   const dimensionIds = dimensions.map((d) => d.id);
@@ -408,6 +436,12 @@ export async function getStagesWithBlocks(versionId: string) {
     list.push({ ...dimension, criteria: criteriaByDimension.get(dimension.id) ?? [] });
     dimensionsByBlock.set(dimension.blockId, list);
   }
+  const deliverableComponentsByBlock = new Map<string, typeof deliverableComponents>();
+  for (const component of deliverableComponents) {
+    const list = deliverableComponentsByBlock.get(component.blockId) ?? [];
+    list.push(component);
+    deliverableComponentsByBlock.set(component.blockId, list);
+  }
 
   const blocksByStage = new Map<
     string,
@@ -415,6 +449,7 @@ export async function getStagesWithBlocks(versionId: string) {
       checklistItems: typeof checklistItems;
       formQuestions: typeof formQuestions;
       analysisDimensions: (typeof dimensions[number] & { criteria: typeof criteria })[];
+      deliverableComponents: typeof deliverableComponents;
     })[]
   >();
   for (const block of blocks) {
@@ -424,6 +459,7 @@ export async function getStagesWithBlocks(versionId: string) {
       checklistItems: itemsByBlock.get(block.id) ?? [],
       formQuestions: questionsByBlock.get(block.id) ?? [],
       analysisDimensions: dimensionsByBlock.get(block.id) ?? [],
+      deliverableComponents: deliverableComponentsByBlock.get(block.id) ?? [],
     });
     blocksByStage.set(block.stageId, list);
   }
@@ -548,5 +584,43 @@ export async function countAnalysisCriteria(dimensionId: string): Promise<number
     .select({ count: sql<number>`count(*)` })
     .from(playbookAnalysisCriteria)
     .where(eq(playbookAnalysisCriteria.dimensionId, dimensionId));
+  return Number(row?.count ?? 0);
+}
+
+/** Mesma cadeia de loadDimensionInBlock — componente pertence ao bloco certo (Fase 2.2B.2A). */
+export async function loadDeliverableComponentInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  componentId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [component] = await db
+    .select()
+    .from(playbookDeliverableComponents)
+    .where(and(eq(playbookDeliverableComponents.id, componentId), eq(playbookDeliverableComponents.blockId, blockId)))
+    .limit(1);
+  if (!component) return null;
+
+  return { ...chain, component };
+}
+
+/** Próxima posição livre entre os componentes do bloco — nunca confia só no DEFAULT 0 da coluna. */
+export async function getNextDeliverableComponentPosition(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ maxPosition: sql<number | null>`max(${playbookDeliverableComponents.position})` })
+    .from(playbookDeliverableComponents)
+    .where(eq(playbookDeliverableComponents.blockId, blockId));
+  return (row?.maxPosition ?? -1) + 1;
+}
+
+export async function countDeliverableComponents(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playbookDeliverableComponents)
+    .where(eq(playbookDeliverableComponents.blockId, blockId));
   return Number(row?.count ?? 0);
 }

@@ -142,6 +142,11 @@ export async function getPlaybookEditorData(playbookId: string, versionId: strin
             updatedAt: criterion.updatedAt.toISOString(),
           })),
         })),
+        deliverableComponents: block.deliverableComponents.map((component) => ({
+          ...component,
+          createdAt: component.createdAt.toISOString(),
+          updatedAt: component.updatedAt.toISOString(),
+        })),
       }));
       return {
         ...stage,
