@@ -955,3 +955,139 @@ export const playbookDeliverableComponents = pgTable(
     check("playbook_deliverable_components_position_non_negative", sql`${table.position} >= 0`),
   ]
 );
+
+// ── Fase 2.2B.2B — Materiais e critérios de qualidade do Entregável ────────
+//
+// Valores em inglês (diferente dos enums em português já existentes no
+// projeto) — decisão explícita desta fase: nomenclatura de banco estável e
+// sem acento, independente do idioma dos rótulos exibidos na UI. Não é
+// inconsistência com deliverable_component_type/format (que ficaram em
+// inglês desde a Fase 2.2B.2A) — é o padrão que playbook_block_type e
+// deliverable_component_type já seguem; os enums em português do projeto
+// (opportunity_status, client_engagement_status etc.) são os que fogem à
+// regra, não o contrário.
+export const deliverableMaterialTypeEnum = pgEnum("deliverable_material_type", [
+  "document",
+  "file",
+  "link",
+  "template",
+  "reference",
+  "spreadsheet",
+  "presentation",
+  "briefing",
+  "other",
+]);
+
+export const deliverableMaterialOriginEnum = pgEnum("deliverable_material_origin", [
+  "brain",
+  "client",
+  "third_party",
+  "system",
+  "define_on_apply",
+]);
+
+export const deliverableMaterialMomentEnum = pgEnum("deliverable_material_moment", [
+  "before_deliverable",
+  "before_component",
+  "during_production",
+  "before_review",
+  "before_delivery",
+  "define_on_apply",
+]);
+
+// Material/modelo necessário para produzir o Entregável (Fase 2.2B.2B).
+// Mesmo raciocínio de cascade de playbookDeliverableComponents: blockId em
+// cascade, apagar o bloco apaga os materiais junto.
+//
+// assigneeType/Role/Id reaproveita o MESMO enum de 3 modalidades já usado
+// pelo bloco (Fase 2.1) e pelo componente (Fase 2.2B.2A) —
+// playbookBlockAssigneeTypeEnum — em vez de criar um enum equivalente
+// (decisão explícita desta fase, item 10). O responsável PRINCIPAL de
+// produção do Entregável não vive aqui nem em metadata: é herdado direto de
+// playbookBlockTemplates.assigneeType/defaultAssigneeRole/defaultAssigneeId
+// (decisão explícita desta fase, item 1) — este assigneeType é só de quem
+// deve FORNECER este material específico, responsabilidade independente.
+//
+// beforeComponentId é nullable e só faz sentido quando requiredMoment =
+// "before_component" — sem CHECK combinando os dois campos de propósito
+// (decisão explícita desta fase, item 9): a consistência trava autosave
+// parcial em rascunho, mesmo raciocínio já documentado para os 3 campos de
+// responsável de playbookDeliverableComponents. Validação de consistência
+// fica pra API/validation (próxima subetapa).
+//
+// resourceId é a primeira FK real do projeto apontando pra `resources`
+// (uso anterior, em document.resourceId, era string solta dentro de
+// metadata jsonb, sem FK) — SET NULL porque o vínculo é "possível/futuro":
+// remover um recurso da biblioteca não pode apagar nem travar a exclusão
+// de um material que o referencia.
+//
+// Sem UNIQUE(position) de propósito — autosave/rascunho precisa admitir
+// posições intermediárias repetidas ou fora de ordem entre um PATCH e o
+// próximo, mesmo padrão de todas as tabelas de filhos ordenáveis já
+// existentes (nenhuma delas tem UNIQUE em position).
+export const playbookDeliverableMaterials = pgTable(
+  "playbook_deliverable_materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    materialType: deliverableMaterialTypeEnum("material_type").notNull(),
+    origin: deliverableMaterialOriginEnum("origin").notNull(),
+    isRequired: boolean("is_required").notNull().default(true),
+    assigneeType: playbookBlockAssigneeTypeEnum("assignee_type").notNull().default("definir_ao_aplicar"),
+    assigneeRole: text("assignee_role"),
+    assigneeId: uuid("assignee_id").references(() => adminUsers.id),
+    requiredMoment: deliverableMaterialMomentEnum("required_moment").notNull().default("define_on_apply"),
+    beforeComponentId: uuid("before_component_id").references((): AnyPgColumn => playbookDeliverableComponents.id, { onDelete: "set null" }),
+    url: text("url"),
+    resourceId: uuid("resource_id").references(() => resources.id, { onDelete: "set null" }),
+    position: integer("position").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("playbook_deliverable_materials_block_position_idx").on(table.blockId, table.position),
+    index("playbook_deliverable_materials_resource_idx").on(table.resourceId),
+    index("playbook_deliverable_materials_before_component_idx").on(table.beforeComponentId),
+    check("playbook_deliverable_materials_position_non_negative", sql`${table.position} >= 0`),
+  ]
+);
+
+// Critério de qualidade do Entregável (Fase 2.2B.2B). Mesmo raciocínio de
+// cascade de playbookAnalysisCriteria: blockId em cascade, apagar o bloco
+// apaga os critérios junto.
+//
+// weight segue exatamente o padrão de playbookAnalysisDimensions/Criteria:
+// nullable, CHECK 0-100 (erro de banco se fora da faixa), sem CHECK de soma
+// = 100 (isso é alerta de app, nunca bloqueante — decisão explícita desta
+// fase, item 3). Ao contrário de Análise, não há toggle useWeights numa
+// coluna própria aqui: o toggle correspondente (qualityUseWeights) vive em
+// metadata do bloco (próxima subetapa), não nesta tabela — a coluna weight
+// em si já é nullable independente do toggle.
+//
+// Sem UNIQUE(position), mesmo raciocínio de playbookDeliverableMaterials
+// acima.
+export const playbookDeliverableQualityCriteria = pgTable(
+  "playbook_deliverable_quality_criteria",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockId: uuid("block_id").notNull().references(() => playbookBlockTemplates.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    isRequired: boolean("is_required").notNull().default(true),
+    weight: integer("weight"),
+    requiresEvidence: boolean("requires_evidence").notNull().default(false),
+    internalGuidance: text("internal_guidance"),
+    position: integer("position").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("playbook_deliverable_quality_criteria_block_position_idx").on(table.blockId, table.position),
+    check("playbook_deliverable_quality_criteria_weight_range", sql`${table.weight} is null or (${table.weight} >= 0 and ${table.weight} <= 100)`),
+    check("playbook_deliverable_quality_criteria_position_non_negative", sql`${table.position} >= 0`),
+  ]
+);
