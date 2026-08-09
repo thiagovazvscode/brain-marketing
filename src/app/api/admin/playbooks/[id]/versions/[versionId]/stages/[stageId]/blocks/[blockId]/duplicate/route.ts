@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  playbookBlockTemplates,
-  playbookChecklistItems,
-  playbookFormQuestions,
-  playbookAnalysisDimensions,
-  playbookAnalysisCriteria,
-  playbookDeliverableComponents,
-} from "@/db/schema";
-import { loadBlockInStage } from "@/lib/playbook-builder";
+import { playbookBlockTemplates } from "@/db/schema";
+import { loadBlockInStage, cloneBlockChildren } from "@/lib/playbook-builder";
 
 export async function POST(
   _request: Request,
@@ -62,122 +55,11 @@ export async function POST(
       })
       .returning();
 
-    // Checklist/Formulário: itens e perguntas são filhos do bloco, clonam
-    // junto com IDs novos — nunca compartilhados entre o original e a cópia.
-    if (original.type === "checklist") {
-      const items = await db.select().from(playbookChecklistItems).where(eq(playbookChecklistItems.blockId, blockId)).orderBy(asc(playbookChecklistItems.position));
-      if (items.length > 0) {
-        await db.insert(playbookChecklistItems).values(
-          items.map((item) => ({
-            blockId: copy.id,
-            title: item.title,
-            description: item.description,
-            groupName: item.groupName,
-            position: item.position,
-            isRequired: item.isRequired,
-            requiresEvidence: item.requiresEvidence,
-            allowsNotes: item.allowsNotes,
-            isActive: item.isActive,
-          }))
-        );
-      }
-    }
-    if (original.type === "form_briefing") {
-      const questions = await db.select().from(playbookFormQuestions).where(eq(playbookFormQuestions.blockId, blockId)).orderBy(asc(playbookFormQuestions.position));
-      if (questions.length > 0) {
-        await db.insert(playbookFormQuestions).values(
-          questions.map((q) => ({
-            blockId: copy.id,
-            label: q.label,
-            helpText: q.helpText,
-            questionType: q.questionType,
-            placeholder: q.placeholder,
-            options: q.options,
-            validation: q.validation,
-            sectionName: q.sectionName,
-            position: q.position,
-            isRequired: q.isRequired,
-          }))
-        );
-      }
-    }
-
-    // Análise: dimensões (e, por dimensão, os critérios) são filhas do
-    // bloco, clonam junto com IDs novos — mesmo raciocínio de checklist/
-    // formulário acima.
-    if (original.type === "analysis") {
-      const dimensions = await db
-        .select()
-        .from(playbookAnalysisDimensions)
-        .where(eq(playbookAnalysisDimensions.blockId, blockId))
-        .orderBy(asc(playbookAnalysisDimensions.position));
-      for (const dimension of dimensions) {
-        const [newDimension] = await db
-          .insert(playbookAnalysisDimensions)
-          .values({
-            blockId: copy.id,
-            name: dimension.name,
-            description: dimension.description,
-            weight: dimension.weight,
-            position: dimension.position,
-            isActive: dimension.isActive,
-          })
-          .returning();
-
-        const criteria = await db
-          .select()
-          .from(playbookAnalysisCriteria)
-          .where(eq(playbookAnalysisCriteria.dimensionId, dimension.id))
-          .orderBy(asc(playbookAnalysisCriteria.position));
-        if (criteria.length > 0) {
-          await db.insert(playbookAnalysisCriteria).values(
-            criteria.map((c) => ({
-              dimensionId: newDimension.id,
-              name: c.name,
-              description: c.description,
-              evaluationType: c.evaluationType,
-              weight: c.weight,
-              isRequired: c.isRequired,
-              requiresEvidence: c.requiresEvidence,
-              evidenceDescription: c.evidenceDescription,
-              guidance: c.guidance,
-              options: c.options,
-              position: c.position,
-              isActive: c.isActive,
-            }))
-          );
-        }
-      }
-    }
-
-    // Entregável (Fase 2.2B.2A): componentes são filhos do bloco, clonam
-    // junto com IDs novos — mesmo raciocínio de checklist/formulário/análise
-    // acima.
-    if (original.type === "deliverable") {
-      const components = await db
-        .select()
-        .from(playbookDeliverableComponents)
-        .where(eq(playbookDeliverableComponents.blockId, blockId))
-        .orderBy(asc(playbookDeliverableComponents.position));
-      if (components.length > 0) {
-        await db.insert(playbookDeliverableComponents).values(
-          components.map((c) => ({
-            blockId: copy.id,
-            title: c.title,
-            description: c.description,
-            componentType: c.componentType,
-            expectedFormat: c.expectedFormat,
-            isRequired: c.isRequired,
-            defaultAssigneeType: c.defaultAssigneeType,
-            defaultAssigneeRole: c.defaultAssigneeRole,
-            defaultAssigneeId: c.defaultAssigneeId,
-            acceptanceCriteria: c.acceptanceCriteria,
-            position: c.position,
-            isActive: c.isActive,
-          }))
-        );
-      }
-    }
+    // Filhos especializados (checklist/formulário/análise/entregável —
+    // componentes+materiais+critérios de qualidade) clonam via ponto único
+    // (cloneBlockChildren), sempre com IDs novos, nunca compartilhados entre
+    // o original e a cópia. Ver comentário da função em playbook-builder.ts.
+    await cloneBlockChildren(blockId, copy.id);
 
     const originalIndex = currentOrder.findIndex((b) => b.id === blockId);
     const newOrder = [...currentOrder];

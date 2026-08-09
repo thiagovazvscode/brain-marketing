@@ -17,15 +17,183 @@ import {
   playbookAnalysisDimensions,
   playbookAnalysisCriteria,
   playbookDeliverableComponents,
+  playbookDeliverableMaterials,
+  playbookDeliverableQualityCriteria,
 } from "@/db/schema";
 import { bumpVersion, computeVersionTransition } from "@/lib/methods";
+
+/**
+ * Clona os filhos especializados de um bloco — itens de checklist,
+ * perguntas de formulário, dimensões+critérios de análise, e (Entregável)
+ * componentes+materiais+critérios de qualidade — do bloco original pro
+ * bloco novo, sempre com IDs novos, nunca compartilhados entre original e
+ * cópia.
+ *
+ * Ponto ÚNICO de clonagem de filhos, usado pelos três caminhos de
+ * duplicação que existem no builder (nova versão de playbook via
+ * cloneStagesAndBlocks, duplicar bloco, duplicar etapa) — antes da Fase
+ * 2.2B.2B.3 cada caminho tinha sua própria cópia dessa lógica, e duplicar
+ * etapa tinha ficado pra trás (só clonava o bloco, nenhum filho
+ * especializado). Ter uma função só evita esse tipo de divergência quando
+ * um tipo de bloco novo é adicionado.
+ *
+ * Materiais com beforeComponentId são remapeados pro componente NOVO
+ * clonado (nunca ficam apontando pro componente do bloco original) —
+ * resourceId e assigneeId NÃO são remapeados: são referências externas
+ * (recurso da biblioteca, admin user) que continuam válidas na cópia.
+ */
+export async function cloneBlockChildren(sourceBlockId: string, targetBlockId: string) {
+  const [checklistItems, formQuestions, dimensions, components, materials, qualityCriteria] = await Promise.all([
+    db.select().from(playbookChecklistItems).where(eq(playbookChecklistItems.blockId, sourceBlockId)).orderBy(asc(playbookChecklistItems.position)),
+    db.select().from(playbookFormQuestions).where(eq(playbookFormQuestions.blockId, sourceBlockId)).orderBy(asc(playbookFormQuestions.position)),
+    db.select().from(playbookAnalysisDimensions).where(eq(playbookAnalysisDimensions.blockId, sourceBlockId)).orderBy(asc(playbookAnalysisDimensions.position)),
+    db.select().from(playbookDeliverableComponents).where(eq(playbookDeliverableComponents.blockId, sourceBlockId)).orderBy(asc(playbookDeliverableComponents.position)),
+    db.select().from(playbookDeliverableMaterials).where(eq(playbookDeliverableMaterials.blockId, sourceBlockId)).orderBy(asc(playbookDeliverableMaterials.position)),
+    db.select().from(playbookDeliverableQualityCriteria).where(eq(playbookDeliverableQualityCriteria.blockId, sourceBlockId)).orderBy(asc(playbookDeliverableQualityCriteria.position)),
+  ]);
+
+  if (checklistItems.length > 0) {
+    await db.insert(playbookChecklistItems).values(
+      checklistItems.map((item) => ({
+        blockId: targetBlockId,
+        title: item.title,
+        description: item.description,
+        groupName: item.groupName,
+        position: item.position,
+        isRequired: item.isRequired,
+        requiresEvidence: item.requiresEvidence,
+        allowsNotes: item.allowsNotes,
+        isActive: item.isActive,
+      }))
+    );
+  }
+
+  if (formQuestions.length > 0) {
+    await db.insert(playbookFormQuestions).values(
+      formQuestions.map((q) => ({
+        blockId: targetBlockId,
+        label: q.label,
+        helpText: q.helpText,
+        questionType: q.questionType,
+        placeholder: q.placeholder,
+        options: q.options,
+        validation: q.validation,
+        sectionName: q.sectionName,
+        position: q.position,
+        isRequired: q.isRequired,
+      }))
+    );
+  }
+
+  for (const dimension of dimensions) {
+    const [newDimension] = await db
+      .insert(playbookAnalysisDimensions)
+      .values({
+        blockId: targetBlockId,
+        name: dimension.name,
+        description: dimension.description,
+        weight: dimension.weight,
+        position: dimension.position,
+        isActive: dimension.isActive,
+      })
+      .returning();
+
+    const criteria = await db
+      .select()
+      .from(playbookAnalysisCriteria)
+      .where(eq(playbookAnalysisCriteria.dimensionId, dimension.id))
+      .orderBy(asc(playbookAnalysisCriteria.position));
+    if (criteria.length > 0) {
+      await db.insert(playbookAnalysisCriteria).values(
+        criteria.map((c) => ({
+          dimensionId: newDimension.id,
+          name: c.name,
+          description: c.description,
+          evaluationType: c.evaluationType,
+          weight: c.weight,
+          isRequired: c.isRequired,
+          requiresEvidence: c.requiresEvidence,
+          evidenceDescription: c.evidenceDescription,
+          guidance: c.guidance,
+          options: c.options,
+          position: c.position,
+          isActive: c.isActive,
+        }))
+      );
+    }
+  }
+
+  // Componentes primeiro, pra ter o mapa oldComponentId → newComponentId
+  // pronto antes de clonar os materiais que possam referenciá-los.
+  const componentIdMap = new Map<string, string>();
+  for (const component of components) {
+    const [newComponent] = await db
+      .insert(playbookDeliverableComponents)
+      .values({
+        blockId: targetBlockId,
+        title: component.title,
+        description: component.description,
+        componentType: component.componentType,
+        expectedFormat: component.expectedFormat,
+        isRequired: component.isRequired,
+        defaultAssigneeType: component.defaultAssigneeType,
+        defaultAssigneeRole: component.defaultAssigneeRole,
+        defaultAssigneeId: component.defaultAssigneeId,
+        acceptanceCriteria: component.acceptanceCriteria,
+        position: component.position,
+        isActive: component.isActive,
+      })
+      .returning();
+    componentIdMap.set(component.id, newComponent.id);
+  }
+
+  if (materials.length > 0) {
+    await db.insert(playbookDeliverableMaterials).values(
+      materials.map((m) => ({
+        blockId: targetBlockId,
+        name: m.name,
+        description: m.description,
+        materialType: m.materialType,
+        origin: m.origin,
+        isRequired: m.isRequired,
+        assigneeType: m.assigneeType,
+        assigneeRole: m.assigneeRole,
+        assigneeId: m.assigneeId,
+        requiredMoment: m.requiredMoment,
+        beforeComponentId: m.beforeComponentId ? componentIdMap.get(m.beforeComponentId) ?? null : null,
+        url: m.url,
+        resourceId: m.resourceId,
+        position: m.position,
+        isActive: m.isActive,
+      }))
+    );
+  }
+
+  if (qualityCriteria.length > 0) {
+    await db.insert(playbookDeliverableQualityCriteria).values(
+      qualityCriteria.map((c) => ({
+        blockId: targetBlockId,
+        name: c.name,
+        description: c.description,
+        isRequired: c.isRequired,
+        weight: c.weight,
+        requiresEvidence: c.requiresEvidence,
+        internalGuidance: c.internalGuidance,
+        position: c.position,
+        isActive: c.isActive,
+      }))
+    );
+  }
+}
 
 /**
  * Copia etapas + blocos de uma versão pra outra, com IDs novos — regra do
  * pedido: "criar uma cópia da versão publicada como nova versão em
  * rascunho" (não abrir a versão nova em branco). Dependência entre blocos é
  * remapeada pro par novo (dependência só existe dentro da mesma etapa, e a
- * etapa inteira é copiada junto).
+ * etapa inteira é copiada junto). Filhos especializados de cada bloco
+ * (checklist/formulário/análise/entregável) clonam via cloneBlockChildren —
+ * ponto único, ver comentário lá.
  */
 async function cloneStagesAndBlocks(sourceVersionId: string, targetVersionId: string) {
   const stages = await getStagesWithBlocks(sourceVersionId);
@@ -88,97 +256,7 @@ async function cloneStagesAndBlocks(sourceVersionId: string, targetVersionId: st
         .returning();
       blockIdMap.set(block.id, newBlock.id);
 
-      // Itens de checklist / perguntas de formulário são filhos do bloco —
-      // clonam junto, com IDs novos, nunca compartilhados entre versões
-      // (regra do pedido).
-      if (block.checklistItems.length > 0) {
-        await db.insert(playbookChecklistItems).values(
-          block.checklistItems.map((item) => ({
-            blockId: newBlock.id,
-            title: item.title,
-            description: item.description,
-            groupName: item.groupName,
-            position: item.position,
-            isRequired: item.isRequired,
-            requiresEvidence: item.requiresEvidence,
-            allowsNotes: item.allowsNotes,
-            isActive: item.isActive,
-          }))
-        );
-      }
-      if (block.formQuestions.length > 0) {
-        await db.insert(playbookFormQuestions).values(
-          block.formQuestions.map((q) => ({
-            blockId: newBlock.id,
-            label: q.label,
-            helpText: q.helpText,
-            questionType: q.questionType,
-            placeholder: q.placeholder,
-            options: q.options,
-            validation: q.validation,
-            sectionName: q.sectionName,
-            position: q.position,
-            isRequired: q.isRequired,
-          }))
-        );
-      }
-      // Dimensões (e, por dimensão, os critérios) de um bloco Análise —
-      // mesmo raciocínio de checklistItems/formQuestions: IDs novos, nunca
-      // compartilhados entre versões (item 8 do pedido da Fase 2.2B.1).
-      for (const dimension of block.analysisDimensions) {
-        const [newDimension] = await db
-          .insert(playbookAnalysisDimensions)
-          .values({
-            blockId: newBlock.id,
-            name: dimension.name,
-            description: dimension.description,
-            weight: dimension.weight,
-            position: dimension.position,
-            isActive: dimension.isActive,
-          })
-          .returning();
-
-        if (dimension.criteria.length > 0) {
-          await db.insert(playbookAnalysisCriteria).values(
-            dimension.criteria.map((c) => ({
-              dimensionId: newDimension.id,
-              name: c.name,
-              description: c.description,
-              evaluationType: c.evaluationType,
-              weight: c.weight,
-              isRequired: c.isRequired,
-              requiresEvidence: c.requiresEvidence,
-              evidenceDescription: c.evidenceDescription,
-              guidance: c.guidance,
-              options: c.options,
-              position: c.position,
-              isActive: c.isActive,
-            }))
-          );
-        }
-      }
-
-      // Componentes de um bloco Entregável (Fase 2.2B.2A) — mesmo
-      // raciocínio de checklistItems/formQuestions/analysisDimensions: IDs
-      // novos, nunca compartilhados entre versões.
-      if (block.deliverableComponents.length > 0) {
-        await db.insert(playbookDeliverableComponents).values(
-          block.deliverableComponents.map((c) => ({
-            blockId: newBlock.id,
-            title: c.title,
-            description: c.description,
-            componentType: c.componentType as never,
-            expectedFormat: c.expectedFormat as never,
-            isRequired: c.isRequired,
-            defaultAssigneeType: c.defaultAssigneeType as never,
-            defaultAssigneeRole: c.defaultAssigneeRole,
-            defaultAssigneeId: c.defaultAssigneeId,
-            acceptanceCriteria: c.acceptanceCriteria,
-            position: c.position,
-            isActive: c.isActive,
-          }))
-        );
-      }
+      await cloneBlockChildren(block.id, newBlock.id);
     }
 
     await Promise.all(
@@ -376,9 +454,9 @@ export async function getStagesWithBlocks(versionId: string) {
   ]);
 
   const blockIds = blocks.map((b) => b.id);
-  const [checklistItems, formQuestions, dimensions, deliverableComponents] =
+  const [checklistItems, formQuestions, dimensions, deliverableComponents, materials, qualityCriteria] =
     blockIds.length === 0
-      ? [[], [], [], []]
+      ? [[], [], [], [], [], []]
       : await Promise.all([
           db
             .select()
@@ -400,6 +478,16 @@ export async function getStagesWithBlocks(versionId: string) {
             .from(playbookDeliverableComponents)
             .where(inArray(playbookDeliverableComponents.blockId, blockIds))
             .orderBy(asc(playbookDeliverableComponents.position)),
+          db
+            .select()
+            .from(playbookDeliverableMaterials)
+            .where(inArray(playbookDeliverableMaterials.blockId, blockIds))
+            .orderBy(asc(playbookDeliverableMaterials.position)),
+          db
+            .select()
+            .from(playbookDeliverableQualityCriteria)
+            .where(inArray(playbookDeliverableQualityCriteria.blockId, blockIds))
+            .orderBy(asc(playbookDeliverableQualityCriteria.position)),
         ]);
 
   const dimensionIds = dimensions.map((d) => d.id);
@@ -442,6 +530,18 @@ export async function getStagesWithBlocks(versionId: string) {
     list.push(component);
     deliverableComponentsByBlock.set(component.blockId, list);
   }
+  const materialsByBlock = new Map<string, typeof materials>();
+  for (const material of materials) {
+    const list = materialsByBlock.get(material.blockId) ?? [];
+    list.push(material);
+    materialsByBlock.set(material.blockId, list);
+  }
+  const qualityCriteriaByBlock = new Map<string, typeof qualityCriteria>();
+  for (const criterion of qualityCriteria) {
+    const list = qualityCriteriaByBlock.get(criterion.blockId) ?? [];
+    list.push(criterion);
+    qualityCriteriaByBlock.set(criterion.blockId, list);
+  }
 
   const blocksByStage = new Map<
     string,
@@ -450,6 +550,8 @@ export async function getStagesWithBlocks(versionId: string) {
       formQuestions: typeof formQuestions;
       analysisDimensions: (typeof dimensions[number] & { criteria: typeof criteria })[];
       deliverableComponents: typeof deliverableComponents;
+      materials: typeof materials;
+      qualityCriteria: typeof qualityCriteria;
     })[]
   >();
   for (const block of blocks) {
@@ -460,6 +562,8 @@ export async function getStagesWithBlocks(versionId: string) {
       formQuestions: questionsByBlock.get(block.id) ?? [],
       analysisDimensions: dimensionsByBlock.get(block.id) ?? [],
       deliverableComponents: deliverableComponentsByBlock.get(block.id) ?? [],
+      materials: materialsByBlock.get(block.id) ?? [],
+      qualityCriteria: qualityCriteriaByBlock.get(block.id) ?? [],
     });
     blocksByStage.set(block.stageId, list);
   }
@@ -622,5 +726,81 @@ export async function countDeliverableComponents(blockId: string): Promise<numbe
     .select({ count: sql<number>`count(*)` })
     .from(playbookDeliverableComponents)
     .where(eq(playbookDeliverableComponents.blockId, blockId));
+  return Number(row?.count ?? 0);
+}
+
+/** Mesma cadeia de loadDeliverableComponentInBlock — material pertence ao bloco certo (Fase 2.2B.2B.3). */
+export async function loadDeliverableMaterialInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  materialId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [material] = await db
+    .select()
+    .from(playbookDeliverableMaterials)
+    .where(and(eq(playbookDeliverableMaterials.id, materialId), eq(playbookDeliverableMaterials.blockId, blockId)))
+    .limit(1);
+  if (!material) return null;
+
+  return { ...chain, material };
+}
+
+/** Próxima posição livre entre os materiais do bloco — nunca confia só no DEFAULT 0 da coluna. */
+export async function getNextDeliverableMaterialPosition(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ maxPosition: sql<number | null>`max(${playbookDeliverableMaterials.position})` })
+    .from(playbookDeliverableMaterials)
+    .where(eq(playbookDeliverableMaterials.blockId, blockId));
+  return (row?.maxPosition ?? -1) + 1;
+}
+
+export async function countDeliverableMaterials(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playbookDeliverableMaterials)
+    .where(eq(playbookDeliverableMaterials.blockId, blockId));
+  return Number(row?.count ?? 0);
+}
+
+/** Mesma cadeia de loadDeliverableMaterialInBlock — critério de qualidade pertence ao bloco certo. */
+export async function loadDeliverableQualityCriterionInBlock(
+  playbookId: string,
+  versionId: string,
+  stageId: string,
+  blockId: string,
+  criterionId: string
+) {
+  const chain = await loadBlockInStage(playbookId, versionId, stageId, blockId);
+  if (!chain) return null;
+
+  const [criterion] = await db
+    .select()
+    .from(playbookDeliverableQualityCriteria)
+    .where(and(eq(playbookDeliverableQualityCriteria.id, criterionId), eq(playbookDeliverableQualityCriteria.blockId, blockId)))
+    .limit(1);
+  if (!criterion) return null;
+
+  return { ...chain, criterion };
+}
+
+/** Próxima posição livre entre os critérios de qualidade do bloco. */
+export async function getNextDeliverableQualityCriterionPosition(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ maxPosition: sql<number | null>`max(${playbookDeliverableQualityCriteria.position})` })
+    .from(playbookDeliverableQualityCriteria)
+    .where(eq(playbookDeliverableQualityCriteria.blockId, blockId));
+  return (row?.maxPosition ?? -1) + 1;
+}
+
+export async function countDeliverableQualityCriteria(blockId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playbookDeliverableQualityCriteria)
+    .where(eq(playbookDeliverableQualityCriteria.blockId, blockId));
   return Number(row?.count ?? 0);
 }

@@ -803,6 +803,113 @@ export const isValidDeliverableComponentType = (id: string): id is DeliverableCo
 export const isValidDeliverableComponentFormat = (id: string): id is DeliverableComponentFormatId =>
   DELIVERABLE_COMPONENT_FORMATS.some((s) => s.id === id);
 
+// ── Fase 2.2B.2B.3 — Materiais e critérios de qualidade do Entregável ────
+// Espelham exatamente os enums do banco (deliverable_material_type/origin/
+// moment, migration 0011) — mesmo raciocínio de DELIVERABLE_COMPONENT_TYPES
+// espelhando deliverable_component_type.
+export const DELIVERABLE_MATERIAL_TYPES = [
+  { id: "document", label: "Documento" },
+  { id: "file", label: "Arquivo" },
+  { id: "link", label: "Link" },
+  { id: "template", label: "Modelo" },
+  { id: "reference", label: "Referência" },
+  { id: "spreadsheet", label: "Planilha" },
+  { id: "presentation", label: "Apresentação" },
+  { id: "briefing", label: "Briefing" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliverableMaterialTypeId = (typeof DELIVERABLE_MATERIAL_TYPES)[number]["id"];
+
+export const DELIVERABLE_MATERIAL_ORIGINS = [
+  { id: "brain", label: "Brain" },
+  { id: "client", label: "Cliente" },
+  { id: "third_party", label: "Terceiro" },
+  { id: "system", label: "Sistema" },
+  { id: "define_on_apply", label: "Definir ao aplicar" },
+] as const;
+
+export type DeliverableMaterialOriginId = (typeof DELIVERABLE_MATERIAL_ORIGINS)[number]["id"];
+
+export const DELIVERABLE_MATERIAL_MOMENTS = [
+  { id: "before_deliverable", label: "Antes de iniciar o Entregável" },
+  { id: "before_component", label: "Antes de um componente específico" },
+  { id: "during_production", label: "Durante a produção" },
+  { id: "before_review", label: "Antes da revisão" },
+  { id: "before_delivery", label: "Antes da entrega" },
+  { id: "define_on_apply", label: "Definir ao aplicar" },
+] as const;
+
+export type DeliverableMaterialMomentId = (typeof DELIVERABLE_MATERIAL_MOMENTS)[number]["id"];
+
+// Limites defensivos (mesmo raciocínio de MAX_DELIVERABLE_COMPONENTS_PER_BLOCK).
+export const MAX_DELIVERABLE_MATERIALS_PER_BLOCK = 50;
+export const MAX_DELIVERABLE_QUALITY_CRITERIA_PER_BLOCK = 50;
+
+export const deliverableMaterialTypeLabel = (id: string | null) => labelOf(DELIVERABLE_MATERIAL_TYPES, id);
+export const deliverableMaterialOriginLabel = (id: string | null) => labelOf(DELIVERABLE_MATERIAL_ORIGINS, id);
+export const deliverableMaterialMomentLabel = (id: string | null) => labelOf(DELIVERABLE_MATERIAL_MOMENTS, id);
+
+export const isValidDeliverableMaterialType = (id: string): id is DeliverableMaterialTypeId =>
+  DELIVERABLE_MATERIAL_TYPES.some((s) => s.id === id);
+export const isValidDeliverableMaterialOrigin = (id: string): id is DeliverableMaterialOriginId =>
+  DELIVERABLE_MATERIAL_ORIGINS.some((s) => s.id === id);
+export const isValidDeliverableMaterialMoment = (id: string): id is DeliverableMaterialMomentId =>
+  DELIVERABLE_MATERIAL_MOMENTS.some((s) => s.id === id);
+
+// ── Fase 2.2B.2B.3 — Produção/Revisão/Entrega (metadata do bloco) ────────
+// Texto validado em app, listas que tendem a crescer — mesmo raciocínio de
+// PLAYBOOK_ASSIGNEE_ROLES/OVERDUE_ACTIONS, não enum do banco (vivem dentro
+// de playbookBlockTemplates.metadata, não em coluna própria).
+export const DELIVERY_CHANNELS = [
+  { id: "email", label: "E-mail" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "client_area", label: "Área do cliente" },
+  { id: "meeting", label: "Reunião/apresentação" },
+  { id: "printed", label: "Material impresso" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliveryChannelId = (typeof DELIVERY_CHANNELS)[number]["id"];
+export const isValidDeliveryChannel = (id: string): id is DeliveryChannelId => DELIVERY_CHANNELS.some((s) => s.id === id);
+export const deliveryChannelLabel = (id: string | null) => labelOf(DELIVERY_CHANNELS, id);
+
+export const DELIVERY_AUDIENCES = [
+  { id: "client", label: "Cliente" },
+  { id: "internal_team", label: "Equipe interna" },
+  { id: "partner", label: "Parceiro" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliveryAudienceId = (typeof DELIVERY_AUDIENCES)[number]["id"];
+export const isValidDeliveryAudience = (id: string): id is DeliveryAudienceId => DELIVERY_AUDIENCES.some((s) => s.id === id);
+export const deliveryAudienceLabel = (id: string | null) => labelOf(DELIVERY_AUDIENCES, id);
+
+export const DELIVERY_EXPECTED_ROLES = [
+  { id: "decision_maker", label: "Tomar decisão" },
+  { id: "reviewer", label: "Revisar" },
+  { id: "approver", label: "Aprovar" },
+  { id: "executor", label: "Executar" },
+  { id: "informed", label: "Ser informado" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type DeliveryExpectedRoleId = (typeof DELIVERY_EXPECTED_ROLES)[number]["id"];
+export const isValidDeliveryExpectedRole = (id: string): id is DeliveryExpectedRoleId => DELIVERY_EXPECTED_ROLES.some((s) => s.id === id);
+export const deliveryExpectedRoleLabel = (id: string | null) => labelOf(DELIVERY_EXPECTED_ROLES, id);
+
+export const PRESENTATION_TYPES = [
+  { id: "in_person", label: "Apresentação presencial" },
+  { id: "video_call", label: "Chamada de vídeo" },
+  { id: "recorded_video", label: "Vídeo gravado" },
+  { id: "written_only", label: "Somente material escrito" },
+  { id: "other", label: "Outro" },
+] as const;
+
+export type PresentationTypeId = (typeof PRESENTATION_TYPES)[number]["id"];
+export const isValidPresentationType = (id: string): id is PresentationTypeId => PRESENTATION_TYPES.some((s) => s.id === id);
+export const presentationTypeLabel = (id: string | null) => labelOf(PRESENTATION_TYPES, id);
+
 /** metadata de Entregável — mesmo raciocínio de sanitizeAnalysisMetadata/sanitizeMeetingMetadata. */
 export function sanitizeDeliverableMetadata(input: unknown): { metadata: Record<string, unknown> } | { error: string } {
   if (input === undefined || input === null) return { metadata: {} };
@@ -845,6 +952,128 @@ export function sanitizeDeliverableMetadata(input: unknown): { metadata: Record<
   // substituto do seletor genérico.
   if (src.notifyAssigneeOnDelay !== undefined) out.notifyAssigneeOnDelay = Boolean(src.notifyAssigneeOnDelay);
   if (src.markStageAtRiskOnDelay !== undefined) out.markStageAtRiskOnDelay = Boolean(src.markStageAtRiskOnDelay);
+
+  // ── Produção (Fase 2.2B.2B.3) ─────────────────────────────────────────
+  if (src.productionInstructions !== undefined) {
+    if (typeof src.productionInstructions !== "string") return { error: "Instruções de produção inválidas." };
+    out.productionInstructions = src.productionInstructions.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+  if (src.productionInternalDeadlineValue !== undefined) {
+    if (src.productionInternalDeadlineValue !== null) {
+      if (typeof src.productionInternalDeadlineValue !== "number" || !Number.isFinite(src.productionInternalDeadlineValue) || src.productionInternalDeadlineValue <= 0) {
+        return { error: "Prazo interno de produção inválido." };
+      }
+    }
+    out.productionInternalDeadlineValue = src.productionInternalDeadlineValue;
+  }
+  if (src.productionInternalDeadlineUnit !== undefined) {
+    if (typeof src.productionInternalDeadlineUnit !== "string" || !isValidDurationUnit(src.productionInternalDeadlineUnit)) {
+      return { error: "Unidade do prazo interno de produção inválida." };
+    }
+    out.productionInternalDeadlineUnit = src.productionInternalDeadlineUnit;
+  }
+  if (src.productionAllowsPartial !== undefined) out.productionAllowsPartial = Boolean(src.productionAllowsPartial);
+  if (src.productionRequiresChecklist !== undefined) out.productionRequiresChecklist = Boolean(src.productionRequiresChecklist);
+  if (src.productionCollaboratorRoles !== undefined) out.productionCollaboratorRoles = sanitizeStringList(src.productionCollaboratorRoles);
+
+  // ── Revisão ────────────────────────────────────────────────────────────
+  if (src.reviewAssigneeType !== undefined) {
+    if (typeof src.reviewAssigneeType !== "string" || !isValidPlaybookBlockAssigneeType(src.reviewAssigneeType)) {
+      return { error: "Modalidade de responsável pela revisão inválida." };
+    }
+    out.reviewAssigneeType = src.reviewAssigneeType;
+  }
+  if (src.reviewAssigneeRole !== undefined) {
+    if (typeof src.reviewAssigneeRole === "string" && src.reviewAssigneeRole && !isValidPlaybookAssigneeRole(src.reviewAssigneeRole)) {
+      return { error: "Papel do revisor inválido." };
+    }
+    out.reviewAssigneeRole = typeof src.reviewAssigneeRole === "string" ? src.reviewAssigneeRole.trim() || null : null;
+  }
+  if (src.reviewAssigneeId !== undefined) out.reviewAssigneeId = typeof src.reviewAssigneeId === "string" ? src.reviewAssigneeId || null : null;
+  if (src.minimumReviews !== undefined) {
+    if (typeof src.minimumReviews !== "number" || !Number.isInteger(src.minimumReviews) || src.minimumReviews < 1) {
+      return { error: "Número mínimo de revisões inválido." };
+    }
+    out.minimumReviews = src.minimumReviews;
+  }
+  if (src.reviewBlocksDelivery !== undefined) out.reviewBlocksDelivery = Boolean(src.reviewBlocksDelivery);
+  if (src.reviewInstructions !== undefined) {
+    if (typeof src.reviewInstructions !== "string") return { error: "Instruções de revisão inválidas." };
+    out.reviewInstructions = src.reviewInstructions.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+
+  // ── Qualidade ──────────────────────────────────────────────────────────
+  if (src.qualityUseWeights !== undefined) out.qualityUseWeights = Boolean(src.qualityUseWeights);
+
+  // ── Entrega ────────────────────────────────────────────────────────────
+  if (src.deliveryAudience !== undefined) {
+    if (typeof src.deliveryAudience !== "string" || !isValidDeliveryAudience(src.deliveryAudience)) return { error: "Público-alvo da entrega inválido." };
+    out.deliveryAudience = src.deliveryAudience;
+  }
+  if (src.deliveryExpectedRole !== undefined) {
+    if (typeof src.deliveryExpectedRole !== "string" || !isValidDeliveryExpectedRole(src.deliveryExpectedRole)) return { error: "Papel esperado do público inválido." };
+    out.deliveryExpectedRole = src.deliveryExpectedRole;
+  }
+  if (src.deliveryChannels !== undefined) {
+    if (!Array.isArray(src.deliveryChannels)) return { error: "Canais de entrega inválidos." };
+    const channels = src.deliveryChannels.filter((c): c is string => typeof c === "string");
+    if (channels.some((c) => !isValidDeliveryChannel(c))) return { error: "Um dos canais de entrega é inválido." };
+    out.deliveryChannels = channels;
+  }
+  if (src.deliveryAdditionalFormats !== undefined) {
+    if (!Array.isArray(src.deliveryAdditionalFormats)) return { error: "Formatos adicionais de entrega inválidos." };
+    const formats = src.deliveryAdditionalFormats.filter((f): f is string => typeof f === "string");
+    if (formats.some((f) => !isValidDeliverableFormat(f))) return { error: "Um dos formatos adicionais de entrega é inválido." };
+    out.deliveryAdditionalFormats = formats;
+  }
+  if (src.deliveryPackaging !== undefined) {
+    if (typeof src.deliveryPackaging !== "string") return { error: "Embalagem de entrega inválida." };
+    out.deliveryPackaging = src.deliveryPackaging.trim().slice(0, MAX_SHORT_TEXT_LENGTH);
+  }
+
+  if (src.requiresPresentation !== undefined) out.requiresPresentation = Boolean(src.requiresPresentation);
+  if (src.presentationType !== undefined) {
+    if (typeof src.presentationType !== "string" || !isValidPresentationType(src.presentationType)) return { error: "Tipo de apresentação inválido." };
+    out.presentationType = src.presentationType;
+  }
+  if (src.presentationDurationValue !== undefined) {
+    if (src.presentationDurationValue !== null) {
+      if (typeof src.presentationDurationValue !== "number" || !Number.isFinite(src.presentationDurationValue) || src.presentationDurationValue <= 0) {
+        return { error: "Duração da apresentação inválida." };
+      }
+    }
+    out.presentationDurationValue = src.presentationDurationValue;
+  }
+  if (src.presentationDurationUnit !== undefined) {
+    if (typeof src.presentationDurationUnit !== "string" || !isValidMeetingDurationUnit(src.presentationDurationUnit)) {
+      return { error: "Unidade de duração da apresentação inválida." };
+    }
+    out.presentationDurationUnit = src.presentationDurationUnit;
+  }
+  if (src.presentationAssigneeType !== undefined) {
+    if (typeof src.presentationAssigneeType !== "string" || !isValidPlaybookBlockAssigneeType(src.presentationAssigneeType)) {
+      return { error: "Modalidade de responsável pela apresentação inválida." };
+    }
+    out.presentationAssigneeType = src.presentationAssigneeType;
+  }
+  if (src.presentationAssigneeRole !== undefined) {
+    if (typeof src.presentationAssigneeRole === "string" && src.presentationAssigneeRole && !isValidPlaybookAssigneeRole(src.presentationAssigneeRole)) {
+      return { error: "Papel do responsável pela apresentação inválido." };
+    }
+    out.presentationAssigneeRole = typeof src.presentationAssigneeRole === "string" ? src.presentationAssigneeRole.trim() || null : null;
+  }
+  if (src.presentationAssigneeId !== undefined) out.presentationAssigneeId = typeof src.presentationAssigneeId === "string" ? src.presentationAssigneeId || null : null;
+  if (src.presentationInstructions !== undefined) {
+    if (typeof src.presentationInstructions !== "string") return { error: "Instruções de apresentação inválidas." };
+    out.presentationInstructions = src.presentationInstructions.trim().slice(0, MAX_LONG_TEXT_LENGTH);
+  }
+
+  if (src.requiresReceiptConfirmation !== undefined) out.requiresReceiptConfirmation = Boolean(src.requiresReceiptConfirmation);
+  if (src.requiresAcceptance !== undefined) out.requiresAcceptance = Boolean(src.requiresAcceptance);
+  // Apenas configuração de template — o fluxo de Approval em si não existe
+  // ainda e não é implementado a partir deste toggle (decisão explícita
+  // desta fase, item 22 do pedido).
+  if (src.requiresFormalApproval !== undefined) out.requiresFormalApproval = Boolean(src.requiresFormalApproval);
 
   return { metadata: out };
 }

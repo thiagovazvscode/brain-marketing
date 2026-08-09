@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { playbookStageTemplates, playbookBlockTemplates } from "@/db/schema";
-import { loadStageInVersion } from "@/lib/playbook-builder";
+import { loadStageInVersion, cloneBlockChildren } from "@/lib/playbook-builder";
 
 // Duplica etapa + blocos com novos IDs, insere a cópia logo após a
 // original e renumera as posições — mesma etapa nunca compartilha registro
@@ -56,9 +56,17 @@ export async function POST(
       })
       .returning();
 
-    if (originalBlocks.length) {
-      await db.insert(playbookBlockTemplates).values(
-        originalBlocks.map((block) => ({
+    // Um insert por bloco (não bulk) — precisa do id novo de cada um pra
+    // clonar os filhos especializados (cloneBlockChildren) logo em seguida;
+    // bulk insert().returning() não garante correspondência de ordem com o
+    // array de origem. Corrige também um débito que passou despercebido:
+    // assigneeType/defaultAssigneeRole não eram copiados pra cópia da etapa
+    // (só defaultAssigneeId), diferente de cloneStagesAndBlocks e do
+    // duplicar-bloco, que sempre copiaram os três.
+    for (const block of originalBlocks) {
+      const [newBlock] = await db
+        .insert(playbookBlockTemplates)
+        .values({
           playbookVersionId: versionId,
           stageId: copy.id,
           type: block.type,
@@ -66,6 +74,8 @@ export async function POST(
           description: block.description,
           internalInstructions: block.internalInstructions,
           position: block.position,
+          assigneeType: block.assigneeType,
+          defaultAssigneeRole: block.defaultAssigneeRole,
           defaultAssigneeId: block.defaultAssigneeId,
           externalResponsibleRole: block.externalResponsibleRole,
           dueOffsetValue: block.dueOffsetValue,
@@ -84,8 +94,14 @@ export async function POST(
           clientExpectedResponse: block.clientExpectedResponse,
           metadata: block.metadata,
           tags: block.tags,
-        }))
-      );
+        })
+        .returning();
+
+      // Filhos especializados (checklist/formulário/análise/entregável) —
+      // débito confirmado que esta rota tinha: duplicar etapa criava os
+      // blocos mas não clonava nenhum filho especializado. Corrigido via o
+      // mesmo ponto único usado por cloneStagesAndBlocks e duplicar-bloco.
+      await cloneBlockChildren(block.id, newBlock.id);
     }
 
     // Renumera todas as posições da versão (0..n-1) com a cópia logo após a

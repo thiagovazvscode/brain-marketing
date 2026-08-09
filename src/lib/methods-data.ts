@@ -147,6 +147,16 @@ export async function getPlaybookEditorData(playbookId: string, versionId: strin
           createdAt: component.createdAt.toISOString(),
           updatedAt: component.updatedAt.toISOString(),
         })),
+        materials: block.materials.map((material) => ({
+          ...material,
+          createdAt: material.createdAt.toISOString(),
+          updatedAt: material.updatedAt.toISOString(),
+        })),
+        qualityCriteria: block.qualityCriteria.map((criterion) => ({
+          ...criterion,
+          createdAt: criterion.createdAt.toISOString(),
+          updatedAt: criterion.updatedAt.toISOString(),
+        })),
       }));
       return {
         ...stage,

@@ -476,6 +476,180 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
             });
           }
         }
+
+        // ── Materiais e modelos (Fase 2.2B.2B.3) ──────────────────────────
+        const activeMaterials = block.materials.filter((m) => m.isActive);
+        const componentIds = new Set(block.deliverableComponents.map((c) => c.id));
+
+        for (const material of block.materials) {
+          if (material.isRequired && !material.name.trim()) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+              tab: "materials", field: "material.name", code: "deliverable.material.nameMissing",
+              message: `Um material obrigatório do entregável "${block.title}" está sem nome.`,
+            });
+            blockOk = false;
+          }
+          if (material.isRequired && !material.origin) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+              tab: "materials", field: "material.origin", code: "deliverable.material.originMissing",
+              message: `Material obrigatório "${material.name}" está sem origem definida.`,
+            });
+            blockOk = false;
+          }
+          if (material.requiredMoment === "before_component" && !material.beforeComponentId) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+              tab: "materials", field: "material.beforeComponentId", code: "deliverable.material.beforeComponentMissing",
+              message: `Material "${material.name}" está com momento "Antes de um componente específico" mas sem componente selecionado.`,
+            });
+            blockOk = false;
+          }
+          if (material.beforeComponentId && !componentIds.has(material.beforeComponentId)) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+              tab: "materials", field: "material.beforeComponentId", code: "deliverable.material.beforeComponentInvalid",
+              message: `Material "${material.name}" referencia um componente que não pertence mais a este entregável.`,
+            });
+            blockOk = false;
+          }
+          if (material.isRequired) {
+            if (material.assigneeType === "papel_padrao" && !material.assigneeRole?.trim()) {
+              rawIssues.push({
+                severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+                tab: "materials", field: "material.assignee", code: "deliverable.material.assignee.roleMissing",
+                message: `Material obrigatório "${material.name}" está com "Papel padrão" selecionado mas sem papel definido.`,
+              });
+              blockOk = false;
+            } else if (material.assigneeType === "usuario_especifico" && !material.assigneeId) {
+              rawIssues.push({
+                severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+                tab: "materials", field: "material.assignee", code: "deliverable.material.assignee.userMissing",
+                message: `Material obrigatório "${material.name}" está com "Usuário específico" selecionado mas sem usuário definido.`,
+              });
+              blockOk = false;
+            }
+          }
+          if (!material.description?.trim()) {
+            rawIssues.push({
+              severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, materialId: material.id,
+              tab: "materials", field: "material.description", code: "deliverable.material.description.none",
+              message: `Material "${material.name}" sem descrição.`,
+            });
+          }
+        }
+        if (activeMaterials.length === 0) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "materials", field: "deliverable.materials", code: "deliverable.materials.none", message: `Entregável "${block.title}" sem materiais configurados.` });
+        } else if (!activeMaterials.some((m) => m.isRequired)) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "materials", field: "deliverable.materials", code: "deliverable.materials.noRequired", message: `Entregável "${block.title}" não tem nenhum material obrigatório.` });
+        }
+
+        // ── Critérios de qualidade (Fase 2.2B.2B.3) ───────────────────────
+        const activeCriteria = block.qualityCriteria.filter((c) => c.isActive);
+        const qualityUseWeights = Boolean(meta.qualityUseWeights);
+
+        for (const criterion of block.qualityCriteria) {
+          if (criterion.isRequired && !criterion.name.trim()) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, qualityCriterionId: criterion.id,
+              tab: "production_quality", section: "quality", field: "quality.name", code: "deliverable.quality.nameMissing",
+              message: `Um critério de qualidade obrigatório do entregável "${block.title}" está sem nome.`,
+            });
+            blockOk = false;
+          }
+          if (criterion.weight != null && (criterion.weight < 0 || criterion.weight > 100)) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, qualityCriterionId: criterion.id,
+              tab: "production_quality", section: "quality", field: "quality.weight", code: "deliverable.quality.weightOutOfRange",
+              message: `Critério de qualidade "${criterion.name}" tem peso fora da faixa de 0 a 100.`,
+            });
+            blockOk = false;
+          }
+        }
+        if (activeCriteria.length === 0) {
+          rawIssues.push({ severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "quality", field: "deliverable.quality", code: "deliverable.quality.none", message: `Entregável "${block.title}" sem critérios de qualidade.` });
+        } else if (qualityUseWeights) {
+          const weightSum = activeCriteria.reduce((sum, c) => sum + (c.weight ?? 0), 0);
+          if (weightSum !== 100) {
+            rawIssues.push({
+              severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "quality",
+              field: "deliverable.quality", code: "deliverable.quality.weights.sumNot100",
+              message: `Os pesos dos critérios de qualidade do entregável "${block.title}" somam ${weightSum}%. O recomendado é atingir 100% antes da publicação.`,
+            });
+          }
+        }
+
+        // ── Revisão (Fase 2.2B.2B.3) ──────────────────────────────────────
+        if (meta.requiresInternalReview) {
+          const reviewAssigneeType = meta.reviewAssigneeType as string | undefined;
+          if (reviewAssigneeType === "papel_padrao" && !(meta.reviewAssigneeRole as string | undefined)?.trim()) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "review",
+              field: "production.reviewAssignee", code: "deliverable.review.assignee.roleMissing",
+              message: `Entregável "${block.title}" exige revisão interna com "Papel padrão" selecionado mas sem papel definido.`,
+            });
+            blockOk = false;
+          } else if (reviewAssigneeType === "usuario_especifico" && !meta.reviewAssigneeId) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "review",
+              field: "production.reviewAssignee", code: "deliverable.review.assignee.userMissing",
+              message: `Entregável "${block.title}" exige revisão interna com "Usuário específico" selecionado mas sem usuário definido.`,
+            });
+            blockOk = false;
+          } else if (!reviewAssigneeType) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "review",
+              field: "production.reviewAssignee", code: "deliverable.review.assignee.none",
+              message: `Entregável "${block.title}" exige revisão interna mas não tem responsável pela revisão definido.`,
+            });
+            blockOk = false;
+          }
+          const minimumReviews = meta.minimumReviews as number | undefined;
+          if (minimumReviews == null || minimumReviews < 1) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "production_quality", section: "review",
+              field: "production.minimumReviews", code: "deliverable.review.minimumReviews.invalid",
+              message: `Entregável "${block.title}" exige revisão interna mas o número mínimo de revisões não está definido.`,
+            });
+            blockOk = false;
+          }
+        }
+
+        // ── Entrega (Fase 2.2B.2B.3) ──────────────────────────────────────
+        if (!(meta.deliveryChannels as string[] | undefined)?.length) {
+          rawIssues.push({
+            severity: "ajuste", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "delivery", section: "channels",
+            field: "delivery.channels", code: "deliverable.delivery.channels.none",
+            message: `Entregável "${block.title}" sem canal de entrega definido.`,
+          });
+        }
+        if (meta.requiresPresentation) {
+          if (!meta.presentationType) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "delivery", section: "presentation",
+              field: "delivery.presentationType", code: "deliverable.delivery.presentation.typeMissing",
+              message: `Entregável "${block.title}" exige apresentação mas não tem tipo definido.`,
+            });
+            blockOk = false;
+          }
+          const presentationAssigneeType = meta.presentationAssigneeType as string | undefined;
+          if (presentationAssigneeType === "papel_padrao" && !(meta.presentationAssigneeRole as string | undefined)?.trim()) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "delivery", section: "presentation",
+              field: "delivery.presentationAssignee", code: "deliverable.delivery.presentation.assigneeRoleMissing",
+              message: `Apresentação obrigatória de "${block.title}" está com "Papel padrão" selecionado mas sem papel definido.`,
+            });
+            blockOk = false;
+          } else if (presentationAssigneeType === "usuario_especifico" && !meta.presentationAssigneeId) {
+            rawIssues.push({
+              severity: "critico", scope: "bloco", stageId: stage.id, blockId: block.id, tab: "delivery", section: "presentation",
+              field: "delivery.presentationAssignee", code: "deliverable.delivery.presentation.assigneeUserMissing",
+              message: `Apresentação obrigatória de "${block.title}" está com "Usuário específico" selecionado mas sem usuário definido.`,
+            });
+            blockOk = false;
+          }
+        }
       }
 
       if (block.type === "document") {

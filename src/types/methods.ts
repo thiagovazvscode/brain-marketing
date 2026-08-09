@@ -268,6 +268,86 @@ export interface DeliverableBlockMetadata {
   formatGuidance?: string;
   notifyAssigneeOnDelay?: boolean;
   markStageAtRiskOnDelay?: boolean;
+
+  // ── Fase 2.2B.2B.3 — Produção ──────────────────────────────────────────
+  // Responsável PRINCIPAL da produção é herdado do próprio bloco
+  // (assigneeType/defaultAssigneeRole/defaultAssigneeId) — não duplicado
+  // aqui. Estes campos cobrem só o que é específico da produção em si.
+  productionInstructions?: string;
+  productionInternalDeadlineValue?: number | null;
+  productionInternalDeadlineUnit?: string;
+  productionAllowsPartial?: boolean;
+  productionRequiresChecklist?: boolean;
+  productionCollaboratorRoles?: string[];
+
+  // ── Revisão ──────────────────────────────────────────────────────────
+  reviewAssigneeType?: string;
+  reviewAssigneeRole?: string | null;
+  reviewAssigneeId?: string | null;
+  minimumReviews?: number;
+  reviewBlocksDelivery?: boolean;
+  reviewInstructions?: string;
+
+  // ── Qualidade ────────────────────────────────────────────────────────
+  qualityUseWeights?: boolean;
+
+  // ── Entrega ──────────────────────────────────────────────────────────
+  deliveryAudience?: string;
+  deliveryExpectedRole?: string;
+  deliveryChannels?: string[];
+  deliveryAdditionalFormats?: string[];
+  deliveryPackaging?: string;
+
+  requiresPresentation?: boolean;
+  presentationType?: string;
+  presentationDurationValue?: number | null;
+  presentationDurationUnit?: string;
+  presentationAssigneeType?: string;
+  presentationAssigneeRole?: string | null;
+  presentationAssigneeId?: string | null;
+  presentationInstructions?: string;
+
+  requiresReceiptConfirmation?: boolean;
+  requiresAcceptance?: boolean;
+  // Configuração de template apenas — o fluxo de Approval em si ainda não
+  // existe e não deve ser implementado a partir deste campo.
+  requiresFormalApproval?: boolean;
+}
+
+export interface PlaybookDeliverableMaterialRow {
+  id: string;
+  blockId: string;
+  name: string;
+  description: string | null;
+  materialType: string;
+  origin: string;
+  isRequired: boolean;
+  assigneeType: string;
+  assigneeRole: string | null;
+  assigneeId: string | null;
+  requiredMoment: string;
+  beforeComponentId: string | null;
+  url: string | null;
+  resourceId: string | null;
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlaybookDeliverableQualityCriterionRow {
+  id: string;
+  blockId: string;
+  name: string;
+  description: string | null;
+  isRequired: boolean;
+  weight: number | null;
+  requiresEvidence: boolean;
+  internalGuidance: string | null;
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PlaybookDeliverableComponentRow {
@@ -352,6 +432,8 @@ export interface PlaybookBlockRow {
   formQuestions: PlaybookFormQuestionRow[];
   analysisDimensions: PlaybookAnalysisDimensionRow[];
   deliverableComponents: PlaybookDeliverableComponentRow[];
+  materials: PlaybookDeliverableMaterialRow[];
+  qualityCriteria: PlaybookDeliverableQualityCriterionRow[];
   createdAt: string;
   updatedAt: string;
 }
@@ -414,6 +496,17 @@ export interface ValidationIssue {
   // Só para problemas de componente de um bloco Entregável (Fase 2.2B.2A) —
   // mesmo raciocínio de dimensionId/criterionId acima.
   componentId?: string;
+  // Só para problemas de material/critério de qualidade de um bloco
+  // Entregável (Fase 2.2B.2B.3) — mesmo raciocínio de componentId acima.
+  materialId?: string;
+  qualityCriterionId?: string;
+  // Navegação da UI de Materiais/Produção/Entrega (Fase 2.2B.2B.4UI, ainda
+  // não implementada): junto com blockId, materialId/qualityCriterionId e
+  // field, dizem à UI qual aba/seção abrir e qual item focar. Só setados
+  // pelas regras novas do bloco Entregável (materiais, qualidade, produção,
+  // revisão, entrega) — problemas antigos continuam sem esses campos.
+  tab?: "materials" | "production_quality" | "delivery";
+  section?: "production" | "review" | "quality" | "audience" | "channels" | "formats" | "presentation" | "confirmation";
   message: string;
   // Chave estável (não a mensagem, que é texto livre) usada só pelo client
   // pra abrir a seção certa do painel e focar o campo problemático ao
