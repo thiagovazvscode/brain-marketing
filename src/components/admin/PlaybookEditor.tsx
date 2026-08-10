@@ -8,6 +8,7 @@ import type {
   PlaybookAnalysisDimensionRow,
   PlaybookChecklistItemRow,
   PlaybookDeliverableComponentRow,
+  PlaybookDeliverableMaterialRow,
   PlaybookEditorData,
   PlaybookFormQuestionRow,
   PlaybookStageRow,
@@ -64,6 +65,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
   const [formQuestionError, setFormQuestionError] = useState<string | null>(null);
   const [analysisCriterionError, setAnalysisCriterionError] = useState<string | null>(null);
   const [deliverableComponentError, setDeliverableComponentError] = useState<string | null>(null);
+  const [deliverableMaterialError, setDeliverableMaterialError] = useState<string | null>(null);
   const [focusHint, setFocusHint] = useState<FocusHint | null>(null);
   // Token por alvo de reorder (blockId p/ dimensões, dimensionId p/ critérios)
   // — incrementado a cada drag solto. Uma resposta (sucesso ou falha) só
@@ -722,6 +724,136 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
     }
   }
 
+  // ── Materiais de Entregável (Fase 2.2B.2B.4UI) — mesmo padrão de
+  // create/update/duplicate/delete de componentes acima (await + refetch);
+  // reorder é o único otimista (token incremental + rollback), mesma regra
+  // de reorderDeliverableComponents. Diferente dos componentes, cria/edita/
+  // duplica/exclui também passam por setSaveState — dá o feedback
+  // "Salvando.../Salvo/Erro ao salvar" pedido pra esta aba (item 14),
+  // reaproveitando o indicador global que reorder já usa. ─────────────────
+  async function createDeliverableMaterial(stageId: string, blockId: string, name: string, materialType: string, origin: string): Promise<string | null> {
+    setSaveState("saving");
+    try {
+      const { material } = await api<{ material: { id: string } }>(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials`, {
+        method: "POST",
+        body: JSON.stringify({ name, materialType, origin }),
+      });
+      setDeliverableMaterialError(null);
+      await refetch();
+      setSaveState("saved");
+      return material.id;
+    } catch (e) {
+      setDeliverableMaterialError(e instanceof Error ? e.message : "Não foi possível criar o material.");
+      setSaveState("error");
+      return null;
+    }
+  }
+
+  async function updateDeliverableMaterial(stageId: string, blockId: string, materialId: string, patch: Record<string, unknown>) {
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials/${materialId}`, { method: "PATCH", body: JSON.stringify(patch) });
+      setDeliverableMaterialError(null);
+      await refetch();
+      setSaveState("saved");
+    } catch (e) {
+      setDeliverableMaterialError(e instanceof Error ? e.message : "Não foi possível atualizar o material.");
+      setSaveState("error");
+    }
+  }
+
+  // Duplicar reaproveita o mesmo endpoint de criação com os campos
+  // essenciais copiados, depois um PATCH pros demais campos — mesmo padrão
+  // de duplicateDeliverableComponent (o projeto não tem endpoint dedicado
+  // de duplicação abaixo do nível de bloco). beforeComponentId/resourceId/
+  // assigneeId são preservados como vieram do original: a duplicação
+  // acontece dentro do MESMO bloco, então continuam válidos sem remapear.
+  async function duplicateDeliverableMaterial(stageId: string, blockId: string, material: PlaybookDeliverableMaterialRow) {
+    setSaveState("saving");
+    try {
+      const { material: created } = await api<{ material: { id: string } }>(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: `${material.name} (cópia)`,
+          materialType: material.materialType,
+          origin: material.origin,
+          description: material.description ?? undefined,
+        }),
+      });
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials/${created.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          isRequired: material.isRequired,
+          assigneeType: material.assigneeType,
+          assigneeRole: material.assigneeRole ?? undefined,
+          assigneeId: material.assigneeId ?? undefined,
+          requiredMoment: material.requiredMoment,
+          beforeComponentId: material.beforeComponentId ?? undefined,
+          url: material.url ?? undefined,
+          resourceId: material.resourceId ?? undefined,
+        }),
+      });
+      await refetch();
+      setSaveState("saved");
+    } catch (e) {
+      setSaveState("error");
+      reportError(e instanceof Error ? e.message : "Não foi possível duplicar o material.");
+    }
+  }
+
+  async function deleteDeliverableMaterial(stageId: string, blockId: string, materialId: string) {
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials/${materialId}`, { method: "DELETE" });
+      await refetch();
+      setSaveState("saved");
+    } catch (e) {
+      setSaveState("error");
+      reportError(e instanceof Error ? e.message : "Não foi possível excluir o material.");
+    }
+  }
+
+  // Mesmo raciocínio de applyDeliverableComponentOrder — reordena localmente
+  // sem tocar em nenhum outro campo.
+  function applyDeliverableMaterialOrder(stageId: string, blockId: string, orderedIds: string[]) {
+    setStages((cur) =>
+      cur.map((s) => {
+        if (s.id !== stageId) return s;
+        return {
+          ...s,
+          blocks: s.blocks.map((b) => {
+            if (b.id !== blockId) return b;
+            const byId = new Map(b.materials.map((m) => [m.id, m]));
+            const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, position: index }));
+            return { ...b, materials: reordered };
+          }),
+        };
+      })
+    );
+  }
+
+  // Otimista, mesmo mecanismo (token incremental) de reorderDeliverableComponents.
+  async function reorderDeliverableMaterials(stageId: string, blockId: string, orderedIds: string[]) {
+    const block = stages.find((s) => s.id === stageId)?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const previousOrder = block.materials.map((m) => m.id);
+    const key = `deliverable-materials:${blockId}`;
+    const token = (reorderTokenRef.current[key] ?? 0) + 1;
+    reorderTokenRef.current[key] = token;
+
+    applyDeliverableMaterialOrder(stageId, blockId, orderedIds);
+    setSaveState("saving");
+    try {
+      await api(`${base}/stages/${stageId}/blocks/${blockId}/deliverable-materials/reorder`, { method: "POST", body: JSON.stringify({ orderedIds }) });
+      if (reorderTokenRef.current[key] !== token) return;
+      setSaveState("saved");
+    } catch {
+      if (reorderTokenRef.current[key] !== token) return;
+      applyDeliverableMaterialOrder(stageId, blockId, previousOrder);
+      reportError("Não foi possível salvar a nova ordem dos materiais.");
+    }
+  }
+
   // ── Autosave (config panel) ──────────────────────────────────────────
   async function saveStage(stageId: string, patch: Record<string, unknown>) {
     const { stage } = await api<{ stage: PlaybookStageRow }>(`${base}/stages/${stageId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -855,6 +987,14 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             onDeleteDeliverableComponent={(blockId, componentId) => selectedStage && deleteDeliverableComponent(selectedStage.id, blockId, componentId)}
             onReorderDeliverableComponents={(blockId, orderedIds) => selectedStage && reorderDeliverableComponents(selectedStage.id, blockId, orderedIds)}
             deliverableComponentError={deliverableComponentError}
+            onCreateDeliverableMaterial={(blockId, name, materialType, origin) =>
+              selectedStage ? createDeliverableMaterial(selectedStage.id, blockId, name, materialType, origin) : Promise.resolve(null)
+            }
+            onUpdateDeliverableMaterial={(blockId, materialId, patch) => selectedStage && updateDeliverableMaterial(selectedStage.id, blockId, materialId, patch)}
+            onDuplicateDeliverableMaterial={(blockId, material) => selectedStage && duplicateDeliverableMaterial(selectedStage.id, blockId, material)}
+            onDeleteDeliverableMaterial={(blockId, materialId) => selectedStage && deleteDeliverableMaterial(selectedStage.id, blockId, materialId)}
+            onReorderDeliverableMaterials={(blockId, orderedIds) => selectedStage && reorderDeliverableMaterials(selectedStage.id, blockId, orderedIds)}
+            deliverableMaterialError={deliverableMaterialError}
             onUpdateBlockMetadata={(blockId, patch) => selectedStage && updateBlockMetadata(selectedStage.id, blockId, patch)}
             resourceOptions={initialData.resources}
             focusHint={focusHint}
@@ -895,6 +1035,7 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
                   onDeleteBlock={requestDeleteBlock}
                   onStatusChange={setSaveState}
                   focusHint={focusHint}
+                  onOpenMaterialsTab={() => setFocusHint({ openTab: "materials", nonce: Date.now() })}
                 />
               </div>
             </div>
@@ -967,7 +1108,15 @@ export function PlaybookEditor({ initialData, assigneeOptions }: { initialData: 
             setSelection(issue.blockId ? { kind: "block", stageId, blockId: issue.blockId } : { kind: "stage", stageId });
             setConfigOpen(true);
             setShowValidation(false);
-            setFocusHint({ field: issue.field, dimensionId: issue.dimensionId, criterionId: issue.criterionId, componentId: issue.componentId, nonce: Date.now() });
+            setFocusHint({
+              field: issue.field,
+              dimensionId: issue.dimensionId,
+              criterionId: issue.criterionId,
+              componentId: issue.componentId,
+              materialId: issue.materialId,
+              qualityCriterionId: issue.qualityCriterionId,
+              nonce: Date.now(),
+            });
           }}
           onClose={() => setShowValidation(false)}
         />

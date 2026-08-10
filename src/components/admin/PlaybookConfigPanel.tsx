@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ChevronDown, ChevronUp, MoreHorizontal, Trash2, Copy } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, MoreHorizontal, Trash2, Copy } from "lucide-react";
 import type { PlaybookBlockRow, PlaybookResourceOption, PlaybookStageRow, SimpleOption } from "@/types/methods";
 import {
   ANALYSIS_TYPES,
@@ -104,6 +104,14 @@ export interface FocusHint {
   // Só para problemas de componente de um bloco Entregável (Fase 2.2B.2A) —
   // mesmo raciocínio de dimensionId/criterionId acima.
   componentId?: string;
+  // Só para problemas de material/critério de qualidade de um bloco
+  // Entregável (Fase 2.2B.2B) — mesmo raciocínio de componentId acima.
+  materialId?: string;
+  qualityCriterionId?: string;
+  // Troca a aba interna do DeliverableBuilder sem necessariamente focar um
+  // item específico — usado pelo resumo clicável do painel direito (item 17
+  // da Fase 2.2B.2B.4UI) e por navegação de Validação sem materialId.
+  openTab?: "materials" | "production" | "delivery";
   // Incrementado a cada clique num problema da Validação — permite focar o
   // mesmo campo duas vezes seguidas (ex.: usuário clica, edita errado, clica
   // de novo no mesmo problema).
@@ -418,6 +426,7 @@ function BlockConfigForm({
   onSave,
   onStatusChange,
   focusHint,
+  onOpenMaterialsTab,
 }: {
   block: PlaybookBlockRow;
   siblingBlocks: PlaybookBlockRow[];
@@ -427,6 +436,7 @@ function BlockConfigForm({
   onSave: (patch: Partial<BlockDraftFields>) => Promise<void>;
   onStatusChange: (status: "pending" | "saving" | "saved" | "error") => void;
   focusHint?: FocusHint | null;
+  onOpenMaterialsTab?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   useFieldFocus(containerRef, focusHint);
@@ -1185,6 +1195,29 @@ function BlockConfigForm({
     </CollapsibleFieldGroup>
   );
 
+  // Resumo clicável só (item 17 da Fase 2.2B.2B.4UI) — o editor completo de
+  // materiais mora na área central (aba "Materiais e modelos" do
+  // DeliverableBuilder), não duplicado aqui. Só conta materiais ATIVOS,
+  // mesmo raciocínio do resumo mostrado na própria aba.
+  const activeMaterialsCount = block.materials.filter((m) => m.isActive);
+  const requiredMaterialsCount = activeMaterialsCount.filter((m) => m.isRequired).length;
+  const materialsSummary = (
+    <button
+      type="button"
+      onClick={onOpenMaterialsTab}
+      disabled={!onOpenMaterialsTab}
+      className="flex w-full items-center justify-between gap-2 border-t border-os-border/70 pt-4 text-left first:border-t-0 first:pt-0 disabled:cursor-default"
+    >
+      <div className="min-w-0">
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-os-muted/80">Materiais</h4>
+        <p className="mt-0.5 truncate text-xs text-os-muted">
+          {activeMaterialsCount.length} {activeMaterialsCount.length === 1 ? "material" : "materiais"} · {requiredMaterialsCount} obrigatório{requiredMaterialsCount === 1 ? "" : "s"}
+        </p>
+      </div>
+      {onOpenMaterialsTab && <ChevronRight className="h-4 w-4 shrink-0 text-os-muted" />}
+    </button>
+  );
+
   const deliverableProduction = (
     <CollapsibleFieldGroup
       title="Produção"
@@ -1463,6 +1496,7 @@ function BlockConfigForm({
       {isDeliverable && (
         <>
           {deliverableIdentification}
+          {materialsSummary}
           {deliverableProduction}
           {deliverableFormat}
           {deliverableResponsibility}
@@ -1595,6 +1629,7 @@ export function PlaybookConfigPanel({
   onDeleteBlock,
   onStatusChange,
   focusHint,
+  onOpenMaterialsTab,
 }: {
   stage: PlaybookStageRow | null;
   block: PlaybookBlockRow | null;
@@ -1607,6 +1642,7 @@ export function PlaybookConfigPanel({
   onDeleteBlock: (stageId: string, blockId: string) => void;
   onStatusChange: (status: "pending" | "saving" | "saved" | "error") => void;
   focusHint?: FocusHint | null;
+  onOpenMaterialsTab?: () => void;
 }) {
   return (
     <div className="flex h-full flex-col rounded-2xl border border-os-border bg-os-card">
@@ -1622,6 +1658,7 @@ export function PlaybookConfigPanel({
             onSave={(patch) => onSaveBlock(stage.id, block.id, patch)}
             onStatusChange={onStatusChange}
             focusHint={focusHint}
+            onOpenMaterialsTab={onOpenMaterialsTab}
           />
         ) : stage ? (
           <StageConfigForm

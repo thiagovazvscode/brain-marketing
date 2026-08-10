@@ -8,6 +8,7 @@ import type {
   PlaybookAnalysisDimensionRow,
   PlaybookChecklistItemRow,
   PlaybookDeliverableComponentRow,
+  PlaybookDeliverableMaterialRow,
   PlaybookFormQuestionRow,
   PlaybookStageRow,
   PlaybookBlockRow,
@@ -276,6 +277,12 @@ export function PlaybookStageContent({
   onDeleteDeliverableComponent,
   onReorderDeliverableComponents,
   deliverableComponentError,
+  onCreateDeliverableMaterial,
+  onUpdateDeliverableMaterial,
+  onDuplicateDeliverableMaterial,
+  onDeleteDeliverableMaterial,
+  onReorderDeliverableMaterials,
+  deliverableMaterialError,
   onUpdateBlockMetadata,
   resourceOptions,
   onBack,
@@ -319,6 +326,12 @@ export function PlaybookStageContent({
   onDeleteDeliverableComponent: (blockId: string, componentId: string) => void;
   onReorderDeliverableComponents: (blockId: string, orderedIds: string[]) => void;
   deliverableComponentError?: string | null;
+  onCreateDeliverableMaterial: (blockId: string, name: string, materialType: string, origin: string) => Promise<string | null>;
+  onUpdateDeliverableMaterial: (blockId: string, materialId: string, patch: Record<string, unknown>) => void;
+  onDuplicateDeliverableMaterial: (blockId: string, material: PlaybookDeliverableMaterialRow) => void;
+  onDeleteDeliverableMaterial: (blockId: string, materialId: string) => void;
+  onReorderDeliverableMaterials: (blockId: string, orderedIds: string[]) => void;
+  deliverableMaterialError?: string | null;
   onUpdateBlockMetadata: (blockId: string, patch: Record<string, unknown>) => void;
   resourceOptions: PlaybookResourceOption[];
   onBack: () => void;
@@ -445,6 +458,14 @@ export function PlaybookStageContent({
           onDuplicateComponent={(component) => onDuplicateDeliverableComponent(selectedBlock.id, component)}
           onDeleteComponent={(componentId) => onDeleteDeliverableComponent(selectedBlock.id, componentId)}
           onReorderComponents={(orderedIds) => onReorderDeliverableComponents(selectedBlock.id, orderedIds)}
+          resourceOptions={resourceOptions}
+          assigneeOptions={assigneeOptions}
+          materialError={deliverableMaterialError}
+          onCreateMaterial={(name, materialType, origin) => onCreateDeliverableMaterial(selectedBlock.id, name, materialType, origin)}
+          onUpdateMaterial={(materialId, patch) => onUpdateDeliverableMaterial(selectedBlock.id, materialId, patch)}
+          onDuplicateMaterial={(material) => onDuplicateDeliverableMaterial(selectedBlock.id, material)}
+          onDeleteMaterial={(materialId) => onDeleteDeliverableMaterial(selectedBlock.id, materialId)}
+          onReorderMaterials={(orderedIds) => onReorderDeliverableMaterials(selectedBlock.id, orderedIds)}
           focusHint={focusHint}
         />
       </div>
