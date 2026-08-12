@@ -20,7 +20,8 @@ export function SiteChrome({ children }: { children: ReactNode }) {
     pathname?.startsWith("/proposta") ||
     pathname?.startsWith("/hub") ||
     pathname?.startsWith("/admin") ||
-    pathname?.startsWith("/briefing");
+    pathname?.startsWith("/briefing") ||
+    pathname?.startsWith("/dashboard");
 
   if (isClean) {
     return <>{children}</>;
