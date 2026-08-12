@@ -115,6 +115,169 @@ export const clients = pgTable("clients", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ── Integração Meta Ads (relatório de performance por cliente) ─────────────
+//
+// clientId aponta sempre pra `clients` (cliente real da agência) — nunca pra
+// um tenant externo. Cada cliente tem no máximo 1 connection ativa por vez
+// (não modelamos múltiplas contas de anúncio simultâneas pra um cliente
+// nesta etapa; um cliente novo com mais de uma conta é um adAccount extra
+// pendurado na mesma connection, não uma segunda connection).
+export const metaConnectionStatusEnum = pgEnum("meta_connection_status", [
+  "connected",
+  "expired",
+  "revoked",
+  "error",
+]);
+
+export const metaConnections = pgTable("meta_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  externalUserId: text("external_user_id"),
+  externalUserName: text("external_user_name"),
+  status: metaConnectionStatusEnum("status").notNull().default("connected"),
+  // Token nunca em texto puro — accessTokenEncrypted guarda AES-256-GCM
+  // (ver src/lib/meta/crypto.ts), chave em META_TOKEN_ENCRYPTION_KEY
+  // (server-only). Nenhuma rota pode selecionar essa coluna em resposta
+  // voltada pro browser.
+  accessTokenEncrypted: text("access_token_encrypted").notNull(),
+  expiresAt: timestamp("expires_at"),
+  lastValidatedAt: timestamp("last_validated_at"),
+  lastErrorMessage: text("last_error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const metaAdAccounts = pgTable(
+  "meta_ad_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    connectionId: uuid("connection_id").notNull().references(() => metaConnections.id),
+    // "act_1234567890" — como o Graph API já retorna, sem reformatar.
+    externalId: text("external_id").notNull(),
+    name: text("name").notNull(),
+    currency: text("currency"),
+    timezoneName: text("timezone_name"),
+    accountStatus: integer("account_status"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("meta_ad_accounts_external_id_idx").on(table.externalId)]
+);
+
+export const metaCampaigns = pgTable(
+  "meta_campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    adAccountId: uuid("ad_account_id").notNull().references(() => metaAdAccounts.id),
+    externalId: text("external_id").notNull(),
+    name: text("name").notNull(),
+    objective: text("objective"),
+    status: text("status"),
+    createdTime: timestamp("created_time"),
+    updatedTime: timestamp("updated_time"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("meta_campaigns_external_id_idx").on(table.externalId)]
+);
+
+export const metaAdsets = pgTable(
+  "meta_adsets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    campaignId: uuid("campaign_id").notNull().references(() => metaCampaigns.id),
+    externalId: text("external_id").notNull(),
+    name: text("name").notNull(),
+    status: text("status"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("meta_adsets_external_id_idx").on(table.externalId)]
+);
+
+export const metaAds = pgTable(
+  "meta_ads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    campaignId: uuid("campaign_id").notNull().references(() => metaCampaigns.id),
+    adsetId: uuid("adset_id").notNull().references(() => metaAdsets.id),
+    externalId: text("external_id").notNull(),
+    creativeId: text("creative_id"),
+    name: text("name").notNull(),
+    status: text("status"),
+    // "IMAGE" | "VIDEO" | "CAROUSEL" | outro — inferido do object_type do
+    // creative retornado pela Meta, guardado como texto validado em app
+    // (mesmo raciocínio de outros campos "lista que cresce" no schema).
+    mediaType: text("media_type"),
+    thumbnailUrl: text("thumbnail_url"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("meta_ads_external_id_idx").on(table.externalId)]
+);
+
+export const metaInsightsLevelEnum = pgEnum("meta_insights_level", ["campaign", "adset", "ad"]);
+
+// Granularidade de 1 dia por entidade — é isso que sustenta os filtros de
+// período sem precisar reagregar nada na hora da leitura. entityId guarda o
+// external_id da campanha/conjunto/anúncio (não uma FK tipada, porque o
+// nível varia linha a linha); metrics carrega os valores já calculados
+// (spend/leads/cpl/ctr/... — ver mapeamento de campos em src/lib/meta/sync.ts).
+export const metaInsightsDaily = pgTable(
+  "meta_insights_daily",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    adAccountId: uuid("ad_account_id").notNull().references(() => metaAdAccounts.id),
+    level: metaInsightsLevelEnum("level").notNull(),
+    entityId: text("entity_id").notNull(),
+    date: date("date").notNull(),
+    metrics: jsonb("metrics").notNull().default({}),
+    fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("meta_insights_daily_unique_idx").on(table.clientId, table.level, table.entityId, table.date),
+    index("meta_insights_daily_client_date_idx").on(table.clientId, table.level, table.date),
+  ]
+);
+
+// ── Sincronização automática (Fase 6) ───────────────────────────────────────
+//
+// Registro de auditoria de cada execução de syncMetaAccount — usado tanto
+// pro header "Atualizado em" do relatório (última sync com status=success)
+// quanto pro lock lógico que impede duas sincronizações simultâneas da mesma
+// conta (ver src/lib/meta/sync-service.ts). NUNCA grava o token aqui —
+// errorMessage é sempre a mensagem de erro já sanitizada, nunca a exceção
+// bruta que poderia conter o token em alguma stack.
+export const metaSyncStatusEnum = pgEnum("meta_sync_status", ["running", "success", "partial", "failed"]);
+
+export const metaSyncLogs = pgTable(
+  "meta_sync_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    adAccountId: uuid("ad_account_id").notNull().references(() => metaAdAccounts.id),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+    status: metaSyncStatusEnum("status").notNull().default("running"),
+    campaignsSynced: integer("campaigns_synced").notNull().default(0),
+    adsetsSynced: integer("adsets_synced").notNull().default(0),
+    adsSynced: integer("ads_synced").notNull().default(0),
+    insightsSynced: integer("insights_synced").notNull().default(0),
+    errorMessage: text("error_message"),
+    trigger: text("trigger").notNull().default("cron"), // "cron" | "manual"
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("meta_sync_logs_ad_account_started_idx").on(table.adAccountId, table.startedAt),
+    index("meta_sync_logs_client_status_idx").on(table.clientId, table.status),
+  ]
+);
+
 export const clientBriefings = pgTable("client_briefings", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id")

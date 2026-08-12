@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { fetchMetaInsightsReport, type InsightPeriod } from "@/lib/reports/broker-client";
-import { REPORT_CLIENTS } from "@/lib/reports/clients";
+import { getClientReport } from "@/lib/reports/query";
+import type { PeriodPreset } from "@/lib/reports/period";
 
 export const dynamic = "force-dynamic";
 
-const VALID_PRESETS = new Set([
+const VALID_PRESETS = new Set<PeriodPreset>([
   "today",
   "yesterday",
   "last_7d",
@@ -12,50 +12,49 @@ const VALID_PRESETS = new Set([
   "last_30d",
   "this_month",
   "last_month",
-  "maximum",
+  "since_start",
+  "custom",
 ]);
 
-function parsePeriod(searchParams: URLSearchParams): InsightPeriod | null {
-  const period = searchParams.get("period") || "last_30d";
-
-  if (period === "custom") {
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
-    if (!from || !to) return null;
-    return { from, to };
-  }
-
-  if (!VALID_PRESETS.has(period)) return null;
-  return period as InsightPeriod;
+function noStore(body: unknown, init?: ResponseInit) {
+  return NextResponse.json(body, { ...init, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ client: string }> }) {
   const { client } = await params;
-  const config = REPORT_CLIENTS[client];
-
-  if (!config) {
-    return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
-  }
-
   const { searchParams } = new URL(request.url);
-  const period = parsePeriod(searchParams);
-  if (!period) {
-    return NextResponse.json({ error: "Período inválido." }, { status: 400 });
+
+  const presetParam = searchParams.get("period") || "last_30d";
+  if (!VALID_PRESETS.has(presetParam as PeriodPreset)) {
+    return noStore({ error: "Período inválido." }, { status: 400 });
   }
+  const preset = presetParam as PeriodPreset;
+
+  const from = searchParams.get("from") || undefined;
+  const to = searchParams.get("to") || undefined;
+  if (preset === "custom" && (!from || !to)) {
+    return noStore({ error: "Período personalizado exige from e to." }, { status: 400 });
+  }
+
   const campaignId = searchParams.get("campaignId") || undefined;
+  const adsetId = searchParams.get("adsetId") || undefined;
+  const adId = searchParams.get("adId") || undefined;
 
-  const result = await fetchMetaInsightsReport({
-    tenantSlug: config.tenantSlug,
-    period,
-    campaignId,
-  });
+  try {
+    const report = await getClientReport(client, { preset, from, to }, { campaignId, adsetId, adId });
 
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    if ("notFound" in report && report.notFound) {
+      return noStore({ error: "Cliente não encontrado." }, { status: 404 });
+    }
+    if ("notConnected" in report && report.notConnected) {
+      return noStore({ error: "Conexão com o Meta ainda não configurada para este cliente.", client: report.client }, { status: 409 });
+    }
+    if ("noData" in report && report.noData) {
+      return noStore({ error: "Nenhum dado sincronizado ainda para este cliente.", client: report.client, account: report.account }, { status: 409 });
+    }
+
+    return noStore(report);
+  } catch (err) {
+    return noStore({ error: err instanceof Error ? err.message : "Erro ao carregar relatório." }, { status: 400 });
   }
-
-  return NextResponse.json(
-    { ...result.data, clientDisplayName: config.displayName },
-    { headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } }
-  );
 }
