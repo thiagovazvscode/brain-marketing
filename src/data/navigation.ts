@@ -12,13 +12,13 @@ export const navLinks: NavLink[] = [
 ];
 
 export const footerNavLinks: NavLink[] = [
-  { label: "Início", href: "#inicio" },
-  { label: "Soluções", href: "#solucoes" },
-  { label: "Tráfego pago", href: "#trafego-pago" },
-  { label: "Especialidade imobiliária", href: "#especialidade" },
-  { label: "Método", href: "#metodo" },
-  { label: "Ecossistema", href: "#ecossistema" },
-  { label: "Contato", href: "#contato" },
+  { label: "Início", href: "/#inicio" },
+  { label: "Soluções", href: "/#solucoes" },
+  { label: "Tráfego pago", href: "/#trafego-pago" },
+  { label: "Especialidade imobiliária", href: "/#especialidade" },
+  { label: "Método", href: "/#metodo" },
+  { label: "Ecossistema", href: "/#ecossistema" },
+  { label: "Contato", href: "/#contato" },
 ];
 
 export const footerLegalLinks: NavLink[] = [

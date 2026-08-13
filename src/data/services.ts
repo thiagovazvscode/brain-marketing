@@ -23,7 +23,7 @@ export const services: Service[] = [
     ],
     icon: Target,
     size: "lg",
-    href: "#trafego-pago",
+    href: "/#trafego-pago",
   },
   {
     id: "posicionamento",
@@ -38,7 +38,7 @@ export const services: Service[] = [
     ],
     icon: Compass,
     size: "md",
-    href: "#solucoes",
+    href: "/#solucoes",
   },
   {
     id: "sites-landing-pages",
@@ -53,7 +53,7 @@ export const services: Service[] = [
     ],
     icon: LayoutTemplate,
     size: "md",
-    href: "#solucoes",
+    href: "/#solucoes",
   },
   {
     id: "audiovisual",
@@ -68,7 +68,7 @@ export const services: Service[] = [
     ],
     icon: Clapperboard,
     size: "sm",
-    href: "#audiovisual",
+    href: "/#audiovisual",
   },
   {
     id: "inteligencia-comercial",
@@ -83,7 +83,7 @@ export const services: Service[] = [
     ],
     icon: LineChart,
     size: "sm",
-    href: "#metodo",
+    href: "/#metodo",
   },
   {
     id: "tecnologia",
@@ -98,6 +98,6 @@ export const services: Service[] = [
     ],
     icon: Workflow,
     size: "md",
-    href: "#ecossistema",
+    href: "/#ecossistema",
   },
 ];

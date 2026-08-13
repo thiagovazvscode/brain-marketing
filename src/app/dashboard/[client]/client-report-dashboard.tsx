@@ -10,8 +10,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Menu } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { getWhatsappLink } from "@/config/site";
+import { Footer } from "@/components/layout/Footer";
 import {
   ResponsiveContainer,
   BarChart,
@@ -344,7 +345,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
   }, [ads, adTab]);
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div id="top" className="min-h-screen bg-black text-white">
       <PortalHeader displayName={displayName} />
 
       <main className="px-6 py-8 sm:px-10">
@@ -583,7 +584,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
         </div>
       </main>
 
-      <PortalFooter />
+      <Footer />
 
       {detailAd ? (
         <AdDetailModal
@@ -599,8 +600,16 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
   );
 }
 
+const PORTAL_NAV_ITEMS: { label: string; href: string; external?: boolean }[] = [
+  { label: "Dashboard", href: "#top" },
+  { label: "Campanhas", href: "#campanhas" },
+  { label: "Anúncios", href: "#anuncios" },
+  { label: "Nossos serviços", href: "/#solucoes", external: true },
+];
+
 function PortalHeader({ displayName }: { displayName: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const initials = displayName
     .split(" ")
     .filter(Boolean)
@@ -612,61 +621,75 @@ function PortalHeader({ displayName }: { displayName: string }) {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-black/90 backdrop-blur">
       <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-4 px-6 py-3 sm:px-10">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 rounded-lg bg-white/95 px-2.5 py-1.5">
-            <Logo width={104} height={31} />
+          <Link href="/" className="flex items-center gap-2" aria-label="Brain Marketing & Performance — início">
+            <Logo width={112} height={34} />
           </Link>
           <nav className="hidden items-center gap-5 text-sm font-medium text-zinc-400 md:flex">
-            <span className="text-white">Dashboard</span>
-            <a href="#campanhas" className="transition hover:text-white">Campanhas</a>
-            <a href="#anuncios" className="transition hover:text-white">Anúncios</a>
-            <a href="/#solucoes" target="_blank" rel="noopener noreferrer" className="transition hover:text-white">
-              Nossos serviços
-            </a>
+            {PORTAL_NAV_ITEMS.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                {...(item.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                className="transition hover:text-white"
+              >
+                {item.label}
+              </a>
+            ))}
           </nav>
         </div>
 
-        <div className="relative flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-full border border-white/10 py-1 pl-1 pr-3 text-xs font-semibold text-zinc-300 hover:bg-white/5"
+            type="button"
+            onClick={() => setNavOpen((v) => !v)}
+            aria-label="Abrir menu"
+            aria-expanded={navOpen}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 hover:bg-white/5 md:hidden"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
-              {initials || "?"}
-            </span>
-            {displayName}
+            <Menu className="h-4 w-4" aria-hidden="true" />
           </button>
-          {menuOpen ? (
-            <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
-              <Link href="/" className="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">
-                Voltar ao site
-              </Link>
-              <span className="block rounded-lg px-3 py-2 text-zinc-600">Conta e login — em breve</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </header>
-  );
-}
 
-function PortalFooter() {
-  return (
-    <footer className="border-t border-white/10 bg-zinc-950">
-      <div className="mx-auto flex max-w-[1360px] flex-col gap-4 px-6 py-8 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-10">
-        <div>
-          <p className="text-sm font-bold text-white">BRAIN Marketing & Performance</p>
-          <p className="mt-0.5">Marketing • Performance • Tecnologia</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <a href="/#solucoes" target="_blank" rel="noopener noreferrer" className="hover:text-white">Serviços</a>
-          <Link href="/" className="hover:text-white">Site</Link>
-          <a href={getWhatsappLink("Olá! Preciso de suporte com minha dashboard Brain.")} target="_blank" rel="noopener noreferrer" className="hover:text-white">
-            Suporte
-          </a>
-          <span>© {new Date().getFullYear()} Brain Marketing & Performance</span>
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex items-center gap-2 rounded-full border border-white/10 py-1 pl-1 pr-3 text-xs font-semibold text-zinc-300 hover:bg-white/5"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
+                {initials || "?"}
+              </span>
+              {displayName}
+            </button>
+            {menuOpen ? (
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
+                <Link href="/" className="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">
+                  Voltar ao site
+                </Link>
+                <span className="block rounded-lg px-3 py-2 text-zinc-600">Conta e login — em breve</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
-    </footer>
+
+      {navOpen ? (
+        <nav className="border-t border-white/10 px-6 py-2 text-sm font-medium text-zinc-400 md:hidden" aria-label="Navegação do portal">
+          <ul className="space-y-1">
+            {PORTAL_NAV_ITEMS.map((item) => (
+              <li key={item.label}>
+                <a
+                  href={item.href}
+                  {...(item.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                  onClick={() => setNavOpen(false)}
+                  className="block rounded-lg px-2 py-2 transition hover:bg-white/5 hover:text-white"
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
+    </header>
   );
 }
 

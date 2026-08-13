@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowUpRight, Mail, MessageCircle } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { services } from "@/data/services";
@@ -95,15 +96,14 @@ export function Footer() {
                   {siteConfig.email}
                 </a>
               </li>
-              <li className="text-sm text-muted">{siteConfig.city}</li>
               <li>
-                <a
-                  href="#contato"
+                <Link
+                  href="/#contato"
                   className="inline-flex items-center gap-1 text-sm font-medium text-brand-magenta transition-colors hover:text-brand-primary"
                 >
                   Solicitar diagnóstico
                   <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

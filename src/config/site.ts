@@ -7,14 +7,13 @@ export const siteConfig = {
   shortName: "Brain",
   description:
     "A Brain conecta estratégia, tráfego pago, posicionamento, audiovisual, tecnologia e inteligência comercial para transformar presença digital em demanda e oportunidades.",
-  url: "https://SEU_DOMINIO_AQUI.com.br",
+  url: "https://brainmktp.com.br",
   locale: "pt_BR",
 
   // Contato — substitua pelos dados reais
   whatsapp: "5591985855801", // formato internacional, apenas números
   whatsappDisplay: "(91) 98585-5801",
-  email: "SEU_EMAIL_AQUI@brainmkt.com.br",
-  city: "SUA_CIDADE_AQUI, UF",
+  email: "suporte@brainmktp.com.br",
 
   // Redes sociais — substitua pelos links reais
   social: {
