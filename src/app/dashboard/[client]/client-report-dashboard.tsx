@@ -83,6 +83,8 @@ type Ad = Metrics & {
 type Adset = { id: string; name: string; status: string | null; campaignId: string | null };
 type Diagnostic = { type: "positive" | "warning" | "info"; message: string };
 
+type ExportScope = { kind: "all" } | { kind: "campaign"; campaignId: string } | { kind: "compare" };
+
 type ReportData = {
   client: { slug: string; name: string };
   account: { externalId: string; name: string; currency: string | null; timezone: string | null };
@@ -223,6 +225,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
   const abortRef = useRef<AbortController | null>(null);
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<{ a: string; b: string } | null>(null);
   const [compareData, setCompareData] = useState<ComparisonResult | null>(null);
@@ -329,20 +332,21 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
     return () => controller.abort();
   }, [compareIds, client, canFetch, periodQuery]);
 
-  const exportPdfHref = useCallback(
-    (scope: "current" | "compare") => {
+  // Escopo explícito escolhido pelo usuário no modal de exportação — nunca
+  // herda conjunto/anúncio do dashboard (o modal só expõe campanha), e nunca
+  // diverge do período ativo (sempre via periodQuery()).
+  const buildPdfHref = useCallback(
+    (scope: ExportScope) => {
       const qs = periodQuery();
-      if (scope === "compare" && compareIds) {
+      if (scope.kind === "compare" && compareIds) {
         qs.set("campaignIdA", compareIds.a);
         qs.set("campaignIdB", compareIds.b);
-      } else {
-        if (campaignId !== "all") qs.set("campaignId", campaignId);
-        if (adsetId !== "all") qs.set("adsetId", adsetId);
-        if (adId !== "all") qs.set("adId", adId);
+      } else if (scope.kind === "campaign") {
+        qs.set("campaignId", scope.campaignId);
       }
       return `/api/reports/${client}/pdf?${qs.toString()}`;
     },
-    [periodQuery, compareIds, campaignId, adsetId, adId, client]
+    [periodQuery, compareIds, client]
   );
 
   // Trocar campanha reseta conjunto/anúncio (dependência em cascata)
@@ -506,15 +510,16 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
               </button>
               {exportMenuOpen ? (
                 <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
-                  <a
-                    href={exportPdfHref(compareData ? "compare" : "current")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setExportMenuOpen(false)}
-                    className="block rounded-lg px-3 py-2 text-zinc-200 hover:bg-white/5"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      setExportModalOpen(true);
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-200 hover:bg-white/5"
                   >
                     Gerar relatório PDF
-                  </a>
+                  </button>
                   <span className="mt-1 block rounded-lg px-3 py-2 text-xs text-zinc-600">
                     Exportar leads (Excel/CSV) — em implantação
                   </span>
@@ -728,7 +733,22 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
             setCompareData(null);
             setCompareError(null);
           }}
-          exportPdfHref={exportPdfHref("compare")}
+          exportPdfHref={buildPdfHref({ kind: "compare" })}
+        />
+      ) : null}
+
+      {exportModalOpen ? (
+        <ExportPdfModal
+          campaigns={allCampaigns}
+          defaultCampaignId={campaignId}
+          periodLabel={PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? period}
+          resolvedRange={data ? { since: data.period.since, until: data.period.until } : null}
+          compareOption={compareData ? { label: `${compareData.a.name} × ${compareData.b.name}` } : null}
+          onClose={() => setExportModalOpen(false)}
+          onGenerate={(scope) => {
+            window.open(buildPdfHref(scope), "_blank", "noopener,noreferrer");
+            setExportModalOpen(false);
+          }}
         />
       ) : null}
     </div>
@@ -1122,6 +1142,92 @@ function ComparePickerModal({
             className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-40"
           >
             Comparar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const EXPORT_ALL_VALUE = "__all__";
+const EXPORT_COMPARE_VALUE = "__compare__";
+
+function ExportPdfModal({
+  campaigns,
+  defaultCampaignId,
+  periodLabel,
+  resolvedRange,
+  compareOption,
+  onClose,
+  onGenerate,
+}: {
+  campaigns: { id: string; name: string; status: string | null }[];
+  /** Filtro de campanha ativo no dashboard ("all" ou um id real) — vira o default do seletor, sem alterar o filtro visual. */
+  defaultCampaignId: string;
+  periodLabel: string;
+  resolvedRange: { since: string; until: string } | null;
+  compareOption: { label: string } | null;
+  onClose: () => void;
+  onGenerate: (scope: ExportScope) => void;
+}) {
+  const initialValue = defaultCampaignId !== "all" ? defaultCampaignId : EXPORT_ALL_VALUE;
+  const [selected, setSelected] = useState(initialValue);
+
+  const scopeFor = (value: string): ExportScope => {
+    if (value === EXPORT_ALL_VALUE) return { kind: "all" };
+    if (value === EXPORT_COMPARE_VALUE) return { kind: "compare" };
+    return { kind: "campaign", campaignId: value };
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h3 className="text-lg font-bold">Gerar relatório</h3>
+          <button onClick={onClose} aria-label="Fechar" className="rounded-full border border-white/10 p-1.5 text-zinc-400 hover:bg-white/5">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <p className="text-xs font-medium text-zinc-500">Período</p>
+            <p className="mt-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white">
+              {periodLabel}
+              {resolvedRange ? ` (${shortDate(resolvedRange.since)} — ${shortDate(resolvedRange.until)})` : ""}
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-500">Campanha</label>
+            <select
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+            >
+              <option value={EXPORT_ALL_VALUE}>Todas as campanhas</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+              {compareOption ? <option value={EXPORT_COMPARE_VALUE}>Comparativo atual: {compareOption.label}</option> : null}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onGenerate(scopeFor(selected))}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          >
+            Gerar PDF
           </button>
         </div>
       </div>
