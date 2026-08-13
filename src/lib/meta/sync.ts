@@ -2,8 +2,37 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { metaConnections, metaAdAccounts, metaCampaigns, metaAdsets, metaAds, metaInsightsDaily } from "@/db/schema";
 import { decryptToken } from "./crypto";
-import { fetchCampaigns, fetchAdsets, fetchAds, fetchInsightsDaily } from "./graph-client";
+import { fetchCampaigns, fetchAdsets, fetchAds, fetchAdImagesByHash, fetchInsightsDaily, type GraphAd } from "./graph-client";
 import { buildDailyMetrics } from "./metrics";
+
+// Prioridade pra achar o hash do asset real por trás de um anúncio: criativo
+// dinâmico (asset_feed_spec, o mais comum nesta conta) primeiro, depois os
+// campos de post/link direto, por último o hash solto no creative.
+function preferredImageHash(ad: GraphAd): string | undefined {
+  const c = ad.creative;
+  return (
+    c?.asset_feed_spec?.images?.[0]?.hash ||
+    c?.object_story_spec?.link_data?.image_hash ||
+    c?.object_story_spec?.video_data?.image_hash ||
+    c?.image_hash
+  );
+}
+
+// Melhor mídia disponível pra exibir o anúncio, em ordem de preferência:
+// asset original em resolução real (via /adimages) > image_url do creative >
+// capa de vídeo do object_story_spec > thumbnail_url (sempre 64x64, borrado,
+// último recurso). width/height só vêm preenchidos quando a Meta realmente
+// informa — nunca inventados.
+function resolveAdMedia(ad: GraphAd, imagesByHash: Map<string, { url: string; width?: number; height?: number }>) {
+  const hash = preferredImageHash(ad);
+  const resolved = hash ? imagesByHash.get(hash) : undefined;
+  const previewUrl = resolved?.url || ad.creative?.image_url || ad.creative?.object_story_spec?.video_data?.image_url || null;
+  return {
+    previewUrl,
+    mediaWidth: resolved?.width ?? null,
+    mediaHeight: resolved?.height ?? null,
+  };
+}
 
 async function loadConnectionAndAccount(clientId: string, adAccountId: string) {
   const [connection] = await db.select().from(metaConnections).where(eq(metaConnections.clientId, clientId)).limit(1);
@@ -63,12 +92,16 @@ export async function syncClientEntities(clientId: string, adAccountId: string) 
   }
 
   const graphAds = await fetchAds(adAccount.externalId, token);
+  const imageHashes = graphAds.map(preferredImageHash).filter((h): h is string => Boolean(h));
+  const imagesByHash = await fetchAdImagesByHash(adAccount.externalId, token, imageHashes);
+
   let adsUpserted = 0;
   for (const ad of graphAds) {
     const campaignId = ad.campaign_id ? campaignIdByExternal.get(ad.campaign_id) : undefined;
     const adsetId = ad.adset_id ? adsetIdByExternal.get(ad.adset_id) : undefined;
     if (!campaignId || !adsetId) continue;
     const thumbnailUrl = ad.creative?.thumbnail_url || ad.creative?.image_url;
+    const media = resolveAdMedia(ad, imagesByHash);
     await db
       .insert(metaAds)
       .values({
@@ -81,6 +114,9 @@ export async function syncClientEntities(clientId: string, adAccountId: string) 
         status: ad.status,
         mediaType: ad.creative?.object_type,
         thumbnailUrl,
+        previewUrl: media.previewUrl,
+        mediaWidth: media.mediaWidth,
+        mediaHeight: media.mediaHeight,
       })
       .onConflictDoUpdate({
         target: metaAds.externalId,
@@ -90,6 +126,9 @@ export async function syncClientEntities(clientId: string, adAccountId: string) 
           creativeId: ad.creative?.id,
           mediaType: ad.creative?.object_type,
           thumbnailUrl,
+          previewUrl: media.previewUrl,
+          mediaWidth: media.mediaWidth,
+          mediaHeight: media.mediaHeight,
           updatedAt: new Date(),
         },
       });

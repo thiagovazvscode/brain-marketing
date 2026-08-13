@@ -213,7 +213,15 @@ export const metaAds = pgTable(
     // creative retornado pela Meta, guardado como texto validado em app
     // (mesmo raciocínio de outros campos "lista que cresce" no schema).
     mediaType: text("media_type"),
+    // thumbnail_url da Meta é fixo em 64x64 (visivelmente borrado em qualquer
+    // uso maior) — mantido só como último fallback. previewUrl vem do
+    // endpoint /adimages (creative real, maior resolução disponível).
+    // mediaWidth/mediaHeight só são preenchidos quando a Meta informa a
+    // dimensão real do asset — nunca inventados quando ausentes.
     thumbnailUrl: text("thumbnail_url"),
+    previewUrl: text("preview_url"),
+    mediaWidth: integer("media_width"),
+    mediaHeight: integer("media_height"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

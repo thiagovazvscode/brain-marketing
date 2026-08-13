@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Logo } from "@/components/ui/Logo";
+import { getWhatsappLink } from "@/config/site";
 import {
   ResponsiveContainer,
   BarChart,
@@ -67,6 +69,9 @@ type Ad = Metrics & {
   status: string | null;
   mediaType: string | null;
   thumbnailUrl: string | null;
+  previewUrl: string | null;
+  mediaWidth: number | null;
+  mediaHeight: number | null;
   campaignId: string | null;
   campaignName: string | null;
   adsetId: string | null;
@@ -133,18 +138,55 @@ function StatusBadge({ status }: { status: string | null }) {
   );
 }
 
-function AdThumb({ ad, size = "normal" }: { ad: Ad; size?: "normal" | "large" }) {
-  const cls = size === "large" ? "aspect-[9/16] w-full max-w-[280px]" : "aspect-[9/16] w-full";
-  if (!ad.thumbnailUrl) {
-    return (
-      <div className={`${cls} flex items-center justify-center rounded-xl border border-white/10 bg-black/40 text-center text-[11px] text-zinc-500`}>
-        Prévia indisponível
-      </div>
-    );
+// Classifica width/height reais (nunca inventados) no rótulo de formato mais
+// próximo, com tolerância pequena pra variações de compressão/crop da Meta.
+// Sem width/height conhecidos, não há badge — não adivinha proporção.
+const KNOWN_RATIOS: { label: string; value: number }[] = [
+  { label: "1:1", value: 1 },
+  { label: "4:5", value: 4 / 5 },
+  { label: "9:16", value: 9 / 16 },
+  { label: "16:9", value: 16 / 9 },
+  { label: "4:3", value: 4 / 3 },
+  { label: "3:4", value: 3 / 4 },
+];
+function formatBadge(w: number | null, h: number | null): { ratio: string; dims: string } | null {
+  if (!w || !h) return null;
+  const actual = w / h;
+  let closest = KNOWN_RATIOS[0];
+  let closestDiff = Math.abs(actual - closest.value);
+  for (const r of KNOWN_RATIOS) {
+    const diff = Math.abs(actual - r.value);
+    if (diff < closestDiff) {
+      closest = r;
+      closestDiff = diff;
+    }
   }
+  const ratio = closestDiff <= 0.04 ? closest.label : `${w}:${h}`;
+  return { ratio, dims: `${w}×${h}` };
+}
+
+function AdThumb({ ad, size = "normal" }: { ad: Ad; size?: "normal" | "large" }) {
+  const src = ad.previewUrl || ad.thumbnailUrl;
+  const badge = formatBadge(ad.mediaWidth, ad.mediaHeight);
+  // Container de altura fixa e consistente pra grade — a imagem nunca é
+  // esticada/cortada dentro dele (object-contain), com letterboxing neutro
+  // quando a proporção real do creative não preenche a caixa inteira.
+  const boxCls = size === "large" ? "h-[420px] w-full max-w-[340px]" : "h-44 w-full sm:h-52";
+
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={ad.thumbnailUrl} alt={ad.name} className={`${cls} rounded-xl border border-white/10 object-cover`} />
+    <div className={`relative ${boxCls} overflow-hidden rounded-xl border border-white/10 bg-black/60`}>
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={ad.name} className="h-full w-full object-contain" />
+      ) : (
+        <div className="flex h-full items-center justify-center text-center text-[11px] text-zinc-500">Prévia indisponível</div>
+      )}
+      {badge ? (
+        <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200">
+          {badge.ratio}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -302,38 +344,36 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
   }, [ads, adTab]);
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white sm:px-10">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-900/60 px-6 py-5">
-          <div>
-            <Link href="/" className="text-sm font-bold tracking-tight text-white hover:text-emerald-400">
-              BRAIN Marketing & Performance
-            </Link>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
-              Relatório de performance · Facebook Ads
-            </p>
-            <h1 className="mt-1 text-xl font-bold">{displayName}</h1>
-            {data?.account ? <p className="mt-0.5 text-xs text-zinc-500">{data.account.name}</p> : null}
-          </div>
-          <div className="flex items-center gap-3">
-            {data ? (
-              <div className="text-right text-xs text-zinc-500">
-                Atualizado em{" "}
-                <span className="font-semibold text-zinc-300">
-                  {data.lastSync ? new Date(data.lastSync).toLocaleString("pt-BR") : "—"}
-                </span>
-                <br />
-                Dados até <span className="font-semibold text-zinc-300">{data.period.until}</span>
-              </div>
-            ) : null}
-            <Link href="/" className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/5">
-              Voltar ao site
-            </Link>
-          </div>
-        </header>
+    <div className="min-h-screen bg-black text-white">
+      <PortalHeader displayName={displayName} />
 
-        {data?.syncWarning ? (
+      <main className="px-6 py-8 sm:px-10">
+        <div className="mx-auto max-w-[1360px]">
+          {/* Boas-vindas / contexto do cliente */}
+          <section className="rounded-2xl border border-white/10 bg-zinc-900/60 px-6 py-5">
+            <h1 className="text-xl font-bold sm:text-2xl">Seja bem-vindo, {displayName}.</h1>
+            <p className="mt-1 text-sm text-zinc-400">Esta é a sua dashboard de performance.</p>
+            <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-white/10 pt-4 text-xs text-zinc-500">
+              <span>
+                Conta Meta <span className="ml-1.5 font-semibold text-zinc-300">{data?.account?.name ?? "—"}</span>
+              </span>
+              <span>
+                Última atualização{" "}
+                <span className="ml-1.5 font-semibold text-zinc-300">
+                  {data?.lastSync ? new Date(data.lastSync).toLocaleString("pt-BR") : "—"}
+                </span>
+              </span>
+              <span>
+                Status{" "}
+                <span className="ml-1.5 inline-flex items-center gap-1.5 font-semibold text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Atualizado
+                </span>
+              </span>
+            </div>
+          </section>
+
+          {data?.syncWarning ? (
           <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300">
             {data.syncWarning}
           </div>
@@ -477,7 +517,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
                 ) : null}
 
                 {/* Campanhas */}
-                <section className="mt-6">
+                <section id="campanhas" className="mt-6 scroll-mt-20">
                   <h2 className="text-sm font-semibold">Campanhas</h2>
                   <p className="mt-0.5 text-xs text-zinc-500">No período selecionado</p>
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -488,7 +528,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
                 </section>
 
                 {/* Anúncios */}
-                <section className="mt-6">
+                <section id="anuncios" className="mt-6 scroll-mt-20">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Anúncios de melhor performance</h2>
@@ -533,15 +573,17 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
                   </div>
                 </section>
 
-                <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-[11px] text-zinc-500">
-                  <span>BRAIN Marketing e Performance · brainmktp.com.br</span>
-                  <span>Dados reais persistidos via Meta Ads — {data.period.since} a {data.period.until}</span>
-                </footer>
+                <p className="mt-8 border-t border-white/10 pt-4 text-[11px] text-zinc-500">
+                  Dados reais persistidos via Meta Ads — {data.period.since} a {data.period.until}
+                </p>
               </>
             )}
           </>
         ) : null}
-      </div>
+        </div>
+      </main>
+
+      <PortalFooter />
 
       {detailAd ? (
         <AdDetailModal
@@ -553,7 +595,78 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
           customTo={customTo}
         />
       ) : null}
-    </main>
+    </div>
+  );
+}
+
+function PortalHeader({ displayName }: { displayName: string }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-black/90 backdrop-blur">
+      <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-4 px-6 py-3 sm:px-10">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2 rounded-lg bg-white/95 px-2.5 py-1.5">
+            <Logo width={104} height={31} />
+          </Link>
+          <nav className="hidden items-center gap-5 text-sm font-medium text-zinc-400 md:flex">
+            <span className="text-white">Dashboard</span>
+            <a href="#campanhas" className="transition hover:text-white">Campanhas</a>
+            <a href="#anuncios" className="transition hover:text-white">Anúncios</a>
+            <a href="/#solucoes" target="_blank" rel="noopener noreferrer" className="transition hover:text-white">
+              Nossos serviços
+            </a>
+          </nav>
+        </div>
+
+        <div className="relative flex items-center gap-3">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex items-center gap-2 rounded-full border border-white/10 py-1 pl-1 pr-3 text-xs font-semibold text-zinc-300 hover:bg-white/5"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-300">
+              {initials || "?"}
+            </span>
+            {displayName}
+          </button>
+          {menuOpen ? (
+            <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
+              <Link href="/" className="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">
+                Voltar ao site
+              </Link>
+              <span className="block rounded-lg px-3 py-2 text-zinc-600">Conta e login — em breve</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function PortalFooter() {
+  return (
+    <footer className="border-t border-white/10 bg-zinc-950">
+      <div className="mx-auto flex max-w-[1360px] flex-col gap-4 px-6 py-8 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-10">
+        <div>
+          <p className="text-sm font-bold text-white">BRAIN Marketing & Performance</p>
+          <p className="mt-0.5">Marketing • Performance • Tecnologia</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <a href="/#solucoes" target="_blank" rel="noopener noreferrer" className="hover:text-white">Serviços</a>
+          <Link href="/" className="hover:text-white">Site</Link>
+          <a href={getWhatsappLink("Olá! Preciso de suporte com minha dashboard Brain.")} target="_blank" rel="noopener noreferrer" className="hover:text-white">
+            Suporte
+          </a>
+          <span>© {new Date().getFullYear()} Brain Marketing & Performance</span>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -702,7 +815,7 @@ function AdDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6" onClick={onClose}>
       <div
-        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
+        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -715,7 +828,7 @@ function AdDetailModal({
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-[220px_1fr]">
+        <div className="mt-4 grid gap-4 sm:grid-cols-[340px_1fr]">
           <AdThumb ad={ad} size="large" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <MiniStat label="Investimento" value={currency(ad.spend)} />
@@ -726,6 +839,7 @@ function AdDetailModal({
             <MiniStat label="Alcance" value={integer(ad.reach)} />
             <MiniStat label="Impressões" value={integer(ad.impressions)} />
             <MiniStat label="Frequência" value={ad.frequency.toFixed(2)} />
+            <MiniStat label="Formato" value={formatBadge(ad.mediaWidth, ad.mediaHeight)?.dims ?? "—"} />
             <MiniStat label="Status" value={STATUS_LABEL[ad.status || ""]?.label || "—"} />
           </div>
         </div>

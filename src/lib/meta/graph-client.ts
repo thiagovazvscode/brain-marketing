@@ -39,6 +39,12 @@ export type GraphCreative = {
   image_url?: string;
   object_type?: string;
   video_id?: string;
+  image_hash?: string;
+  asset_feed_spec?: { images?: { hash?: string }[] };
+  object_story_spec?: {
+    link_data?: { image_hash?: string };
+    video_data?: { image_url?: string; image_hash?: string };
+  };
 };
 
 export type GraphAd = {
@@ -155,10 +161,43 @@ export async function fetchAdsets(adAccountExternalId: string, token: string) {
 
 export async function fetchAds(adAccountExternalId: string, token: string) {
   const data = await graphGet<{ data?: GraphAd[] }>(`${adAccountExternalId}/ads`, token, {
-    fields: "id,name,adset_id,campaign_id,status,creative{id,thumbnail_url,image_url,object_type,video_id}",
+    fields:
+      "id,name,adset_id,campaign_id,status," +
+      "creative{id,thumbnail_url,image_url,object_type,video_id,image_hash," +
+      "asset_feed_spec{images{hash}}," +
+      "object_story_spec{link_data{image_hash},video_data{image_url,image_hash}}}",
     limit: "200",
   });
   return data.data ?? [];
+}
+
+export type GraphAdImage = { hash: string; url: string; width?: number; height?: number };
+
+// Fonte de verdade pra resolução real do creative — thumbnail_url da Meta é
+// sempre 64x64 (borrado em qualquer exibição maior), mas o asset original
+// por trás de cada image_hash pode ser consultado em resolução real aqui.
+// Nunca inventa width/height: só retorna o que a Meta de fato informa.
+export async function fetchAdImagesByHash(
+  adAccountExternalId: string,
+  token: string,
+  hashes: string[]
+): Promise<Map<string, GraphAdImage>> {
+  const result = new Map<string, GraphAdImage>();
+  const uniqueHashes = Array.from(new Set(hashes)).filter(Boolean);
+  if (uniqueHashes.length === 0) return result;
+
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < uniqueHashes.length; i += CHUNK_SIZE) {
+    const chunk = uniqueHashes.slice(i, i + CHUNK_SIZE);
+    const data = await graphGet<{ data?: GraphAdImage[] }>(`${adAccountExternalId}/adimages`, token, {
+      hashes: JSON.stringify(chunk),
+      fields: "hash,url,width,height",
+    });
+    for (const img of data.data ?? []) {
+      if (img.hash && img.url) result.set(img.hash, img);
+    }
+  }
+  return result;
 }
 
 const INSIGHT_FIELDS = [
