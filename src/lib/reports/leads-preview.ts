@@ -1,8 +1,10 @@
-import { and, eq, gte, lte, inArray } from "drizzle-orm";
+import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, metaCampaigns, metaInsightsDaily } from "@/db/schema";
+import { clients, metaAdAccounts, metaCampaigns, metaInsightsDaily } from "@/db/schema";
+import { resolveReportDateRange, type PeriodInput } from "./period";
 
 export type CampaignLeadsPreview = { id: string; name: string; leads: number };
+export type LeadsPreviewResult = { since: string; until: string; perCampaign: CampaignLeadsPreview[]; totalLeads: number };
 
 /**
  * Prévia de "quantos leads existem" pro seletor de exportação — soma
@@ -10,16 +12,39 @@ export type CampaignLeadsPreview = { id: string; name: string; leads: number };
  * registros individuais (essa é outra coisa, ver src/lib/leads/source.ts).
  * Serve só pra mostrar "N leads encontrados" antes de exportar, não é o
  * dado que vai pro arquivo.
+ *
+ * Resolve o período (presets Hoje/Ontem/7/15/30 dias/Personalizado) sempre
+ * pela MESMA função central já homologada do dashboard
+ * (resolveReportDateRange), usando o timezone real da conta Meta — nunca
+ * recebe since/until já calculado do chamador, pra não existir uma segunda
+ * lógica de datas por trás (item 4 do pedido).
  */
 export async function getCampaignLeadsPreview(
   clientSlug: string,
   campaignIds: string[],
-  since: string,
-  until: string
-): Promise<{ perCampaign: CampaignLeadsPreview[]; totalLeads: number } | null> {
+  period: PeriodInput
+): Promise<LeadsPreviewResult | null> {
   const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.slug, clientSlug)).limit(1);
   if (!client) return null;
-  if (campaignIds.length === 0) return { perCampaign: [], totalLeads: 0 };
+
+  const [adAccount] = await db.select().from(metaAdAccounts).where(eq(metaAdAccounts.clientId, client.id)).limit(1);
+  if (!adAccount) return null;
+
+  const [{ min: earliest }] = await db
+    .select({ min: sql<string | null>`min(${metaInsightsDaily.date})` })
+    .from(metaInsightsDaily)
+    .where(eq(metaInsightsDaily.clientId, client.id));
+  if (!earliest) return { since: "", until: "", perCampaign: [], totalLeads: 0 };
+
+  const range = resolveReportDateRange({
+    period: period.preset,
+    from: period.from,
+    to: period.to,
+    timezone: adAccount.timezoneName || "UTC",
+    earliestAvailable: earliest,
+  });
+
+  if (campaignIds.length === 0) return { since: range.since, until: range.until, perCampaign: [], totalLeads: 0 };
 
   const campaignsMeta = await db
     .select({ externalId: metaCampaigns.externalId, name: metaCampaigns.name })
@@ -34,8 +59,8 @@ export async function getCampaignLeadsPreview(
         eq(metaInsightsDaily.clientId, client.id),
         eq(metaInsightsDaily.level, "campaign"),
         inArray(metaInsightsDaily.entityId, campaignIds),
-        gte(metaInsightsDaily.date, since),
-        lte(metaInsightsDaily.date, until)
+        gte(metaInsightsDaily.date, range.since),
+        lte(metaInsightsDaily.date, range.until)
       )
     );
 
@@ -47,5 +72,5 @@ export async function getCampaignLeadsPreview(
 
   const perCampaign = campaignsMeta.map((c) => ({ id: c.externalId, name: c.name, leads: sums.get(c.externalId) ?? 0 }));
   const totalLeads = perCampaign.reduce((s, c) => s + c.leads, 0);
-  return { perCampaign, totalLeads };
+  return { since: range.since, until: range.until, perCampaign, totalLeads };
 }

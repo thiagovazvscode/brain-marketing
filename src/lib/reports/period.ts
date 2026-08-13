@@ -3,6 +3,7 @@ export type PeriodPreset =
   | "yesterday"
   | "last_7d"
   | "last_14d"
+  | "last_15d"
   | "last_30d"
   | "this_month"
   | "last_month"
@@ -103,6 +104,12 @@ export function resolveReportDateRange(options: {
     case "last_14d":
       until = addDays(todayStr, -1);
       since = addDays(until, -13);
+      break;
+    case "last_15d":
+      // Só usado pelo modal de exportação de leads (item 1 do pedido) — o
+      // filtro principal do dashboard continua com last_14d, nunca alterado.
+      until = addDays(todayStr, -1);
+      since = addDays(until, -14);
       break;
     case "last_30d":
       until = addDays(todayStr, -1);

@@ -776,8 +776,11 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
           format={leadsModalFormat}
           campaigns={allCampaigns}
           defaultCampaignId={campaignId}
-          defaultSince={data?.period.since ?? null}
-          defaultUntil={data?.period.until ?? null}
+          dashboardPeriod={period}
+          dashboardCustomFrom={customFrom}
+          dashboardCustomTo={customTo}
+          resolvedSince={data?.period.since ?? null}
+          resolvedUntil={data?.period.until ?? null}
           onClose={() => setLeadsModalFormat(null)}
         />
       ) : null}
@@ -1274,32 +1277,58 @@ function ExportPdfModal({
   );
 }
 
-type LeadsPreview = { perCampaign: { id: string; name: string; leads: number }[]; totalLeads: number };
+type LeadsPreview = { since: string; until: string; perCampaign: { id: string; name: string; leads: number }[]; totalLeads: number };
 type LeadsBlockedInfo = { reason: string; missing: string[] };
+type LeadsPeriodPreset = "today" | "yesterday" | "last_7d" | "last_15d" | "last_30d" | "custom";
+
+const LEADS_PERIOD_PRESETS: { value: LeadsPeriodPreset; label: string }[] = [
+  { value: "today", label: "Hoje" },
+  { value: "yesterday", label: "Ontem" },
+  { value: "last_7d", label: "7 dias" },
+  { value: "last_15d", label: "15 dias" },
+  { value: "last_30d", label: "30 dias" },
+  { value: "custom", label: "Personalizado" },
+];
+const LEADS_QUICK_PRESETS = new Set<string>(LEADS_PERIOD_PRESETS.filter((p) => p.value !== "custom").map((p) => p.value));
 
 function ExportLeadsModal({
   client,
   format,
   campaigns,
   defaultCampaignId,
-  defaultSince,
-  defaultUntil,
+  dashboardPeriod,
+  dashboardCustomFrom,
+  dashboardCustomTo,
+  resolvedSince,
+  resolvedUntil,
   onClose,
 }: {
   client: string;
   format: "xlsx" | "csv";
   campaigns: { id: string; name: string; status: string | null }[];
   defaultCampaignId: string;
-  defaultSince: string | null;
-  defaultUntil: string | null;
+  /** Preset ativo no dashboard (ex.: "last_30d") — vira o default do modal quando existe um preset equivalente (item 3). */
+  dashboardPeriod: string;
+  dashboardCustomFrom: string;
+  dashboardCustomTo: string;
+  /** Range já resolvido pelo dashboard — usado como preenchimento de "Personalizado" quando o preset do dashboard não tem equivalente aqui (ex.: 14 dias, mês atual). */
+  resolvedSince: string | null;
+  resolvedUntil: string | null;
   onClose: () => void;
 }) {
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(defaultCampaignId !== "all" ? [defaultCampaignId] : [])
   );
-  const [since, setSince] = useState(defaultSince ?? todayIso);
-  const [until, setUntil] = useState(defaultUntil ?? todayIso);
+  const [periodPreset, setPeriodPreset] = useState<LeadsPeriodPreset>(() =>
+    LEADS_QUICK_PRESETS.has(dashboardPeriod) ? (dashboardPeriod as LeadsPeriodPreset) : "custom"
+  );
+  const [customFrom, setCustomFrom] = useState(
+    () => (dashboardPeriod === "custom" ? dashboardCustomFrom : resolvedSince) || todayIso
+  );
+  const [customTo, setCustomTo] = useState(
+    () => (dashboardPeriod === "custom" ? dashboardCustomTo : resolvedUntil) || todayIso
+  );
   const [csvVariant, setCsvVariant] = useState<"completa" | "mailing">("completa");
   const [preview, setPreview] = useState<LeadsPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -1307,6 +1336,7 @@ function ExportLeadsModal({
   const [exporting, setExporting] = useState(false);
 
   const allSelected = campaigns.length > 0 && selectedIds.size === campaigns.length;
+  const dateError = periodPreset === "custom" && customFrom && customTo && customFrom > customTo;
 
   function toggleCampaign(id: string) {
     setBlocked(null);
@@ -1323,11 +1353,20 @@ function ExportLeadsModal({
     setSelectedIds(allSelected ? new Set() : new Set(campaigns.map((c) => c.id)));
   }
 
+  function buildPeriodQuery() {
+    const qs = new URLSearchParams({ period: periodPreset });
+    if (periodPreset === "custom") {
+      qs.set("from", customFrom);
+      qs.set("to", customTo);
+    }
+    return qs;
+  }
+
   // Sem seleção/período válido não há o que buscar — em vez de zerar
   // `preview` sincronamente dentro do efeito (dispara o lint
   // react-hooks/set-state-in-effect e cascateia um render extra à toa), o
   // valor exibido é derivado na hora de renderizar (effectivePreview).
-  const hasQuery = selectedIds.size > 0 && Boolean(since) && Boolean(until);
+  const hasQuery = selectedIds.size > 0 && (periodPreset !== "custom" || (Boolean(customFrom) && Boolean(customTo) && !dateError));
 
   useEffect(() => {
     if (!hasQuery) return;
@@ -1335,7 +1374,9 @@ function ExportLeadsModal({
     const timer = setTimeout(async () => {
       setPreviewLoading(true);
       try {
-        const qs = new URLSearchParams({ format: "preview", since, until, campaignIds: Array.from(selectedIds).join(",") });
+        const qs = buildPeriodQuery();
+        qs.set("format", "preview");
+        qs.set("campaignIds", Array.from(selectedIds).join(","));
         const res = await fetch(`/api/reports/${client}/leads?${qs}`, { signal: controller.signal });
         if (res.ok) setPreview(await res.json());
       } catch (err) {
@@ -1348,7 +1389,8 @@ function ExportLeadsModal({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [client, hasQuery, selectedIds, since, until]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, hasQuery, selectedIds, periodPreset, customFrom, customTo]);
 
   const effectivePreview = hasQuery ? preview : null;
 
@@ -1356,7 +1398,9 @@ function ExportLeadsModal({
     setExporting(true);
     setBlocked(null);
     try {
-      const qs = new URLSearchParams({ format, since, until, campaignIds: Array.from(selectedIds).join(",") });
+      const qs = buildPeriodQuery();
+      qs.set("format", format);
+      qs.set("campaignIds", Array.from(selectedIds).join(","));
       if (format === "csv") qs.set("variant", csvVariant);
       const res = await fetch(`/api/reports/${client}/leads?${qs}`);
       if (!res.ok) {
@@ -1393,33 +1437,65 @@ function ExportLeadsModal({
         </div>
 
         <div className="mt-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-zinc-500">Data inicial</label>
-              <input
-                type="date"
-                value={since}
-                max={until}
-                onChange={(e) => {
-                  setBlocked(null);
-                  setSince(e.target.value);
-                }}
-                className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
-              />
+          <div>
+            <label className="text-xs font-medium text-zinc-500">Período</label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {LEADS_PERIOD_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => {
+                    setBlocked(null);
+                    // Ao trocar de preset (inclusive indo pra "Personalizado"),
+                    // os campos de data partem do último range resolvido —
+                    // senão "Personalizado" mostraria datas de uma seleção
+                    // anterior sem relação com o que a pessoa acabou de ver.
+                    if (preview) {
+                      setCustomFrom(preview.since);
+                      setCustomTo(preview.until);
+                    }
+                    setPeriodPreset(p.value);
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    periodPreset === p.value ? "bg-white text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-500">Data final</label>
-              <input
-                type="date"
-                value={until}
-                min={since}
-                onChange={(e) => {
-                  setBlocked(null);
-                  setUntil(e.target.value);
-                }}
-                className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
-              />
-            </div>
+
+            {periodPreset === "custom" ? (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-zinc-500">Data inicial</label>
+                  <input
+                    type="date"
+                    value={customFrom}
+                    max={customTo || undefined}
+                    onChange={(e) => {
+                      setBlocked(null);
+                      setCustomFrom(e.target.value);
+                    }}
+                    className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-500">Data final</label>
+                  <input
+                    type="date"
+                    value={customTo}
+                    min={customFrom || undefined}
+                    onChange={(e) => {
+                      setBlocked(null);
+                      setCustomTo(e.target.value);
+                    }}
+                    className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                  />
+                </div>
+                {dateError ? <p className="col-span-2 text-xs text-red-400">Data final antes da inicial.</p> : null}
+              </div>
+            ) : null}
           </div>
 
           {format === "csv" ? (

@@ -7,10 +7,24 @@ import { getLeadsForClient } from "@/lib/leads/source";
 import { buildLeadsWorkbook } from "@/lib/leads/workbook";
 import { buildLeadsCsv } from "@/lib/leads/csv";
 import { buildLeadsFilename } from "@/lib/reports/filename";
+import type { PeriodPreset } from "@/lib/reports/period";
 
 // exceljs usa APIs de Node — mesmo raciocínio do PDF (route.tsx).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const VALID_PRESETS = new Set<PeriodPreset>([
+  "today",
+  "yesterday",
+  "last_7d",
+  "last_14d",
+  "last_15d",
+  "last_30d",
+  "this_month",
+  "last_month",
+  "since_start",
+  "custom",
+]);
 
 function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status, headers: { "Cache-Control": "no-store" } });
@@ -21,20 +35,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
   const { searchParams } = new URL(request.url);
 
   const format = searchParams.get("format") ?? "preview";
-  const since = searchParams.get("since");
-  const until = searchParams.get("until");
+  const presetParam = searchParams.get("period") ?? "last_30d";
+  if (!VALID_PRESETS.has(presetParam as PeriodPreset)) return jsonError("Período inválido.", 400);
+  const preset = presetParam as PeriodPreset;
+
+  const from = searchParams.get("from") || undefined;
+  const to = searchParams.get("to") || undefined;
+  if (preset === "custom" && (!from || !to)) return jsonError("Período personalizado exige from e to.", 400);
+
   const campaignIds = (searchParams.get("campaignIds") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const variant = searchParams.get("variant") === "mailing" ? "mailing" : "completa";
 
-  if (!since || !until) return jsonError("Informe o período (since/until).", 400);
   if (campaignIds.length === 0) return jsonError("Selecione ao menos uma campanha.", 400);
 
+  // Período sempre resolvido aqui dentro (mesma função central do
+  // dashboard, timezone real da conta) — since/until nunca chegam prontos
+  // do chamador (item 4 do pedido).
+  const preview = await getCampaignLeadsPreview(client, campaignIds, { preset, from, to });
+  if (!preview) return jsonError("Cliente não encontrado.", 404);
+  const { since, until } = preview;
+
   if (format === "preview") {
-    const preview = await getCampaignLeadsPreview(client, campaignIds, since, until);
-    if (!preview) return jsonError("Cliente não encontrado.", 404);
     return NextResponse.json(preview, { headers: { "Cache-Control": "no-store" } });
   }
 
@@ -51,10 +75,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
     return jsonError(availability.reason, 501, { missing: availability.missing });
   }
 
-  // Código pronto pra quando availability.available === true — não
-  // exercido hoje, mas mantido correto e completo (item 7 do pedido).
-  const preview = await getCampaignLeadsPreview(client, campaignIds, since, until);
-  const campaignNames = preview?.perCampaign.map((c) => c.name) ?? [];
+  const campaignNames = preview.perCampaign.map((c) => c.name);
 
   if (availability.leads.length === 0) {
     return jsonError("Nenhum lead encontrado para os filtros selecionados.", 404);
