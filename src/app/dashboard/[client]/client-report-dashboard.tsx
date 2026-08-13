@@ -763,6 +763,7 @@ const PORTAL_NAV_ITEMS: { label: string; href: string; external?: boolean }[] = 
 ];
 
 function PortalHeader({ displayName }: { displayName: string }) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const initials = displayName
@@ -816,10 +817,18 @@ function PortalHeader({ displayName }: { displayName: string }) {
             </button>
             {menuOpen ? (
               <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
-                <Link href="/" className="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">
-                  Voltar ao site
+                <Link href="/account" className="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">
+                  Minha conta
                 </Link>
-                <span className="block rounded-lg px-3 py-2 text-zinc-600">Conta e login — em breve</span>
+                <button
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+                    router.push("/login");
+                  }}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-zinc-300 hover:bg-white/5"
+                >
+                  Sair
+                </button>
               </div>
             ) : null}
           </div>

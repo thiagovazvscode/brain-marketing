@@ -1,9 +1,10 @@
 import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { clients, clientBriefings, clientProducts, products, clientDiagnostics, clientStageHistory, adminUsers } from "@/db/schema";
+import { clients, clientBriefings, clientProducts, products, clientDiagnostics, clientStageHistory, adminUsers, clientMemberships } from "@/db/schema";
 import { ClientProductsPanel } from "@/components/admin/ClientProductsPanel";
 import { ClientDiagnosticPanel } from "@/components/admin/ClientDiagnosticPanel";
+import { ClientPortalAccessPanel } from "@/components/admin/ClientPortalAccessPanel";
 import { ClientTabs } from "@/components/admin/ClientTabs";
 import { methodStageLabel } from "@/lib/method-stages";
 import { onboardingStatusLabel, operationalStatusLabel } from "@/lib/billing";
@@ -81,7 +82,7 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
   const [client] = await db.select().from(clients).where(eq(clients.slug, slug)).limit(1);
   if (!client) notFound();
 
-  const [briefings, engagementRows, catalog, diagnosticRows, historyRows] = await Promise.all([
+  const [briefings, engagementRows, catalog, diagnosticRows, historyRows, portalUserRows] = await Promise.all([
     db.select().from(clientBriefings).where(eq(clientBriefings.clientId, client.id)).orderBy(desc(clientBriefings.submittedAt)),
     db
       .select({
@@ -127,6 +128,20 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
       .innerJoin(products, eq(products.id, clientProducts.productId))
       .where(eq(clientProducts.clientId, client.id))
       .orderBy(desc(clientStageHistory.changedAt)),
+    db
+      .select({
+        id: clientMemberships.id,
+        userId: adminUsers.id,
+        name: adminUsers.name,
+        email: adminUsers.email,
+        role: clientMemberships.role,
+        status: clientMemberships.status,
+        lastAccessAt: clientMemberships.lastAccessAt,
+      })
+      .from(clientMemberships)
+      .innerJoin(adminUsers, eq(adminUsers.id, clientMemberships.userId))
+      .where(eq(clientMemberships.clientId, client.id))
+      .orderBy(clientMemberships.createdAt),
   ]);
 
   const activeOrPausedProductIds = new Set(engagementRows.filter((e) => e.status !== "encerrado").map((e) => e.productId));
@@ -262,6 +277,12 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
     </section>
   );
 
+  const portal = (
+    <section className="rounded-2xl border border-os-border bg-os-card p-5">
+      <ClientPortalAccessPanel clientSlug={slug} users={portalUserRows} />
+    </section>
+  );
+
   const historico = (
     <div className="space-y-6">
       <section className="rounded-2xl border border-os-border bg-os-card p-5">
@@ -330,6 +351,7 @@ export default async function AdminClientDetailPage({ params }: { params: Promis
           geral: visaoGeral,
           produtos,
           diagnostico,
+          portal,
           historico,
         }}
       />

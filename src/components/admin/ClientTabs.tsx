@@ -12,6 +12,7 @@ const TABS: TabDef[] = [
   { id: "geral", label: "Visão Geral" },
   { id: "produtos", label: "Produtos" },
   { id: "diagnostico", label: "Diagnóstico" },
+  { id: "portal", label: "Acesso ao portal" },
   { id: "operacao", label: "Operação", comingSoon: true },
   { id: "tarefas", label: "Tarefas", comingSoon: true },
   { id: "reunioes", label: "Reuniões", comingSoon: true },

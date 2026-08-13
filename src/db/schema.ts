@@ -9,6 +9,10 @@ export const pixelProviderEnum = pgEnum("pixel_provider", ["meta", "ga4"]);
 // Papel do usuário dentro do Brain OS — conjunto pequeno e estável o
 // suficiente pra justificar enum (ao contrário de onboarding/operational
 // status, que mudam com mais frequência e ficam como texto validado em app).
+// "cliente" adicionado na Fase 7 (portal do cliente) — mesma tabela/enum de
+// usuário do Brain OS, sem criar uma segunda base de auth: um usuário
+// "cliente" só ganha acesso de fato através de uma linha em
+// clientMemberships (login por si só não abre nenhum client_id).
 export const userRoleEnum = pgEnum("user_role", [
   "administrador",
   "comercial",
@@ -16,6 +20,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "atendimento",
   "financeiro",
   "colaborador",
+  "cliente",
 ]);
 
 export const adminUsers = pgTable("admin_users", {
@@ -24,6 +29,10 @@ export const adminUsers = pgTable("admin_users", {
   passwordHash: text("password_hash").notNull(),
   name: text("name"),
   role: userRoleEnum("role").notNull().default("administrador"),
+  // Fase 7: true logo após a Brain criar o acesso ou resetar a senha — força
+  // a troca no próximo login antes de liberar qualquer rota protegida
+  // (nunca fica em texto puro em lugar nenhum, só o hash muda).
+  passwordChangeRequired: boolean("password_change_required").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -114,6 +123,37 @@ export const clients = pgTable("clients", {
   enteredAt: date("entered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ── Portal do cliente — Fase 7 (login e acesso) ─────────────────────────────
+//
+// CLIENT ↓ CLIENT_MEMBERSHIPS ↓ USER (adminUsers) — nunca 1 cliente = 1
+// usuário fixo. Vários usuários (proprietário/coordenador/gerente) podem
+// futuramente acessar o mesmo cliente; um usuário poderia em tese pertencer
+// a mais de um cliente (a UNIQUE é por par cliente+usuário, não por
+// usuário). client_id NUNCA vem do browser — toda autorização resolve esta
+// tabela a partir do userId da sessão (ver src/lib/client-access.ts e
+// src/proxy.ts), nunca de um client_id na URL/query string.
+export const clientMembershipRoleEnum = pgEnum("client_membership_role", [
+  "proprietario",
+  "coordenador",
+  "gerente",
+]);
+export const clientMembershipStatusEnum = pgEnum("client_membership_status", ["ativo", "inativo"]);
+
+export const clientMemberships = pgTable(
+  "client_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    userId: uuid("user_id").notNull().references(() => adminUsers.id),
+    role: clientMembershipRoleEnum("role").notNull().default("gerente"),
+    status: clientMembershipStatusEnum("status").notNull().default("ativo"),
+    lastAccessAt: timestamp("last_access_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("client_memberships_client_user_idx").on(table.clientId, table.userId)]
+);
 
 // ── Integração Meta Ads (relatório de performance por cliente) ─────────────
 //

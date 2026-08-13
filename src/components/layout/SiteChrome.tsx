@@ -21,7 +21,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
     pathname?.startsWith("/hub") ||
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/briefing") ||
-    pathname?.startsWith("/dashboard");
+    pathname?.startsWith("/dashboard") ||
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/definir-senha") ||
+    pathname?.startsWith("/account");
 
   if (isClean) {
     return <>{children}</>;
