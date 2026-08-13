@@ -199,6 +199,11 @@ export const metaAdAccounts = pgTable(
     currency: text("currency"),
     timezoneName: text("timezone_name"),
     accountStatus: integer("account_status"),
+    // Fase 8 (leads reais) — Page que roda os Lead Ads dessa conta. Nullable:
+    // nem toda conta faz Lead Ads, e a maioria dos clientes existentes nunca
+    // teve isso preenchido. Descoberta manualmente por enquanto (via
+    // creative.object_story_spec.page_id dos anúncios reais), não por OAuth.
+    pageId: text("page_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -290,6 +295,59 @@ export const metaInsightsDaily = pgTable(
   (table) => [
     uniqueIndex("meta_insights_daily_unique_idx").on(table.clientId, table.level, table.entityId, table.date),
     index("meta_insights_daily_client_date_idx").on(table.clientId, table.level, table.date),
+  ]
+);
+
+// ── Leads individuais do Meta Lead Ads (Fase 8) ─────────────────────────────
+//
+// Completamente separada de metaInsightsDaily: aquela é agregado (spend/
+// leads count/CPL por dia), esta é UM REGISTRO REAL POR SUBMISSÃO DE
+// FORMULÁRIO — nunca confundir as duas nem usar uma como substituta da
+// outra (decisão explícita desta fase). clientId sempre presente e é a
+// única coisa que autoriza export/leitura — nunca misturar leads entre
+// clientes, mesmo que dois clientes por acaso usem a mesma Page.
+//
+// leadgenId é o identificador da Meta pro lead individual — globalmente
+// único no Graph API, mas a UNIQUE index aqui é (clientId, leadgenId): dedup
+// correto mesmo se algum dia dois clientes acabarem compartilhando dado (não
+// deveria acontecer, mas a constraint não depende dessa garantia externa).
+//
+// leadDateLocal é a mesma técnica de metaInsightsDaily.date: dia já
+// resolvido no timezone da CONTA (nunca UTC), calculado uma vez na
+// sincronização a partir de createdTime — permite filtro de período por
+// simples comparação de string, mesma convenção usada em todo o resto do
+// app (ver src/lib/reports/period.ts).
+//
+// fieldData guarda o array bruto de respostas do formulário (field_data da
+// Meta) — nome/telefone/email são extraídos pra colunas próprias (join/
+// filtro mais simples), mas o resto das perguntas customizadas (renda,
+// interesse, cidade...) só existe dentro de fieldData, lido dinamicamente
+// na exportação (nunca assume que todo formulário tem as mesmas perguntas).
+export const metaLeads = pgTable(
+  "meta_leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    adAccountId: uuid("ad_account_id").notNull().references(() => metaAdAccounts.id),
+    pageId: text("page_id").notNull(),
+    formId: text("form_id").notNull(),
+    formName: text("form_name"),
+    leadgenId: text("leadgen_id").notNull(),
+    campaignId: text("campaign_id"),
+    adsetId: text("adset_id"),
+    adId: text("ad_id"),
+    createdTime: timestamp("created_time").notNull(),
+    leadDateLocal: date("lead_date_local").notNull(),
+    name: text("name"),
+    phone: text("phone"),
+    email: text("email"),
+    fieldData: jsonb("field_data").notNull().default([]),
+    fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("meta_leads_client_leadgen_idx").on(table.clientId, table.leadgenId),
+    index("meta_leads_client_campaign_date_idx").on(table.clientId, table.campaignId, table.leadDateLocal),
   ]
 );
 

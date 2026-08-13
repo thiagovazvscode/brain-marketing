@@ -1278,7 +1278,10 @@ function ExportPdfModal({
 }
 
 type LeadsPreview = { since: string; until: string; perCampaign: { id: string; name: string; leads: number }[]; totalLeads: number };
-type LeadsBlockedInfo = { reason: string; missing: string[] };
+// Só a mensagem — nunca detalhe técnico de infraestrutura (item 4 do pedido:
+// "o cliente não deve ver detalhes de infraestrutura").
+type LeadsBlockedInfo = { reason: string };
+const GENERIC_EXPORT_FAILURE_MESSAGE = "Não foi possível preparar a exportação neste momento. Tente novamente em alguns minutos.";
 type LeadsPeriodPreset = "today" | "yesterday" | "last_7d" | "last_15d" | "last_30d" | "custom";
 
 const LEADS_PERIOD_PRESETS: { value: LeadsPeriodPreset; label: string }[] = [
@@ -1405,7 +1408,7 @@ function ExportLeadsModal({
       const res = await fetch(`/api/reports/${client}/leads?${qs}`);
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        setBlocked({ reason: json?.error ?? "Não foi possível exportar agora.", missing: json?.missing ?? [] });
+        setBlocked({ reason: json?.error ?? GENERIC_EXPORT_FAILURE_MESSAGE });
         return;
       }
       const blob = await res.blob();
@@ -1551,17 +1554,7 @@ function ExportLeadsModal({
           </div>
 
           {blocked ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-              <p className="font-semibold">{blocked.reason}</p>
-              {blocked.missing.length > 0 ? (
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-200/80">
-                  {blocked.missing.map((m, i) => (
-                    <li key={i}>{m}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <p className="mt-2 text-amber-200/80">O relatório em PDF continua disponível normalmente.</p>
-            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">{blocked.reason}</div>
           ) : null}
         </div>
 

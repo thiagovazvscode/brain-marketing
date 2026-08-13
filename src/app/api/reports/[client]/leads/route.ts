@@ -26,8 +26,13 @@ const VALID_PRESETS = new Set<PeriodPreset>([
   "custom",
 ]);
 
-function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
-  return NextResponse.json({ error: message, ...extra }, { status, headers: { "Cache-Control": "no-store" } });
+// Mensagem única voltada pro cliente quando algo falha depois da validação
+// de entrada — nunca expõe detalhe de infraestrutura (permissão Meta,
+// tabela, etc.). O motivo técnico real vai só pro log do servidor.
+const GENERIC_FAILURE_MESSAGE = "Não foi possível preparar a exportação neste momento. Tente novamente em alguns minutos.";
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ client: string }> }) {
@@ -51,61 +56,67 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
 
   if (campaignIds.length === 0) return jsonError("Selecione ao menos uma campanha.", 400);
 
-  // Período sempre resolvido aqui dentro (mesma função central do
-  // dashboard, timezone real da conta) — since/until nunca chegam prontos
-  // do chamador (item 4 do pedido).
-  const preview = await getCampaignLeadsPreview(client, campaignIds, { preset, from, to });
-  if (!preview) return jsonError("Cliente não encontrado.", 404);
-  const { since, until } = preview;
+  try {
+    // Período sempre resolvido aqui dentro (mesma função central do
+    // dashboard, timezone real da conta) — since/until nunca chegam prontos
+    // do chamador (item 4 do pedido de ajuste de período).
+    const preview = await getCampaignLeadsPreview(client, campaignIds, { preset, from, to });
+    if (!preview) return jsonError("Cliente não encontrado.", 404);
+    const { since, until } = preview;
 
-  if (format === "preview") {
-    return NextResponse.json(preview, { headers: { "Cache-Control": "no-store" } });
-  }
+    if (format === "preview") {
+      return NextResponse.json(preview, { headers: { "Cache-Control": "no-store" } });
+    }
 
-  if (format !== "xlsx" && format !== "csv") return jsonError("Formato inválido.", 400);
+    if (format !== "xlsx" && format !== "csv") return jsonError("Formato inválido.", 400);
 
-  const [clientRow] = await db.select({ name: clients.name }).from(clients).where(eq(clients.slug, client)).limit(1);
-  if (!clientRow) return jsonError("Cliente não encontrado.", 404);
+    const [clientRow] = await db.select({ name: clients.name }).from(clients).where(eq(clients.slug, client)).limit(1);
+    if (!clientRow) return jsonError("Cliente não encontrado.", 404);
 
-  // Auditado: nenhuma conta deste projeto tem leads_retrieval nem tabela de
-  // registro individual ainda — ver src/lib/leads/source.ts. Nunca gera
-  // arquivo com dado fabricado; bloqueia com o motivo exato.
-  const availability = await getLeadsForClient(client, { campaignIds, since, until });
-  if (!availability.available) {
-    return jsonError(availability.reason, 501, { missing: availability.missing });
-  }
+    const availability = await getLeadsForClient(client, { campaignIds, since, until });
+    if (!availability.available) {
+      // Detalhe técnico só no log do servidor — o cliente nunca vê isso
+      // (item 4 do pedido: "cliente não deve ver detalhes de infraestrutura").
+      console.error(`[leads-export] indisponível pra ${client}: ${availability.reason}`, availability.missing);
+      return jsonError(GENERIC_FAILURE_MESSAGE, 503);
+    }
 
-  const campaignNames = preview.perCampaign.map((c) => c.name);
+    const campaignNames = preview.perCampaign.map((c) => c.name);
 
-  if (availability.leads.length === 0) {
-    return jsonError("Nenhum lead encontrado para os filtros selecionados.", 404);
-  }
+    if (availability.leads.length === 0) {
+      return jsonError("Nenhum lead encontrado para os filtros selecionados.", 404);
+    }
 
-  if (format === "xlsx") {
-    const buffer = await buildLeadsWorkbook({
-      clientName: clientRow.name,
-      since,
-      until,
-      campaignNames,
-      leads: availability.leads,
-    });
-    const filename = buildLeadsFilename({ clientSlug: client, campaignNames, since, until, extension: "xlsx" });
-    return new Response(new Uint8Array(buffer), {
+    if (format === "xlsx") {
+      const buffer = await buildLeadsWorkbook({
+        clientName: clientRow.name,
+        since,
+        until,
+        campaignNames,
+        leads: availability.leads,
+      });
+      const filename = buildLeadsFilename({ clientSlug: client, campaignNames, since, until, extension: "xlsx" });
+      return new Response(new Uint8Array(buffer), {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const csv = buildLeadsCsv(availability.leads, variant);
+    const filename = buildLeadsFilename({ clientSlug: client, campaignNames, since, until, extension: "csv" });
+    return new Response(csv, {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
       },
     });
+  } catch (err) {
+    // Idem — erro técnico real só no log do servidor.
+    console.error(`[leads-export] falha inesperada pra ${client}:`, err instanceof Error ? err.message : err);
+    return jsonError(GENERIC_FAILURE_MESSAGE, 500);
   }
-
-  const csv = buildLeadsCsv(availability.leads, variant);
-  const filename = buildLeadsFilename({ clientSlug: client, campaignNames, since, until, extension: "csv" });
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
 }

@@ -1,39 +1,70 @@
-import type { LeadsAvailability } from "./types";
+import { and, eq, gte, lte, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { clients, metaLeads, metaCampaigns, metaAdsets, metaAds } from "@/db/schema";
+import type { LeadRecord, LeadsAvailability } from "./types";
+
+// Nomes de campo padrão do Meta Lead Ads (pt/en, formulários variam) — tudo
+// que não é isso vira "pergunta customizada" na exportação (renda, cidade,
+// interesse...), nunca assumindo que todo formulário tem as mesmas.
+const STANDARD_FIELD_NAMES = new Set(["full_name", "nome", "phone_number", "telefone", "email"]);
 
 /**
- * Fonte dos registros individuais de lead — hoje sempre indisponível pra
- * qualquer cliente deste projeto. Auditado em 2026-08-13 (e reverificado ao
- * vivo antes desta implementação, via GET /me/permissions do Graph API): o
- * token Meta que alimenta o brain-marketing só tem `ads_read`,
- * `business_management`, `public_profile` — sem `leads_retrieval` não dá
- * pra listar formulários nem recuperar leadgen_id/field_data individuais, só
- * os agregados de Insights que já alimentam o dashboard e os KPIs.
- *
- * Também não existe, ainda, nenhuma tabela neste projeto pra guardar
- * registro individual de lead (metaInsightsDaily é 100% agregado). Ver
- * [[project-mv-imoveis-comparativo-exportacao]] na memória pro que falta
- * pra desbloquear isso de verdade.
- *
- * NUNCA fabricar LeadRecord[] a partir de contagem agregada — por isso esta
- * função sempre retorna `available:false` até essas duas peças existirem de
- * verdade. clientSlug/filters ficam na assinatura pra manter a interface
- * estável quando isso for implementado.
+ * Fonte dos registros individuais de lead — lê direto de meta_leads
+ * (populado por src/lib/meta/leads-sync.ts), nunca deriva/estima a partir de
+ * metaInsightsDaily (agregado). client_id sempre resolvido a partir do slug
+ * e usado em toda a query — nunca mistura leads entre clientes.
  */
 export async function getLeadsForClient(
   clientSlug: string,
   filters: { campaignIds: string[]; since: string; until: string }
 ): Promise<LeadsAvailability> {
-  void clientSlug;
-  void filters;
-  return {
-    available: false,
-    reason:
-      "A exportação de leads individuais ainda não está disponível para esta conta — falta permissão da Meta e uma tabela própria de registros.",
-    missing: [
-      "Autorização Meta com escopo leads_retrieval (+ pages_show_list, pages_read_engagement) para a conta da MV Imóveis — a conexão atual só tem ads_read.",
-      "Confirmar Page do Facebook que roda os Lead Ads da MV Imóveis e vincular essa autorização a ela.",
-      "Aprovação de App Review da Meta para leads_retrieval em produção (permissão Standard Access).",
-      "Tabela nova no banco do brain-marketing para registros individuais de lead (leadgen_id, form_id, form_name, campos de resposta) — hoje só existe o agregado diário de Insights.",
-    ],
-  };
+  const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.slug, clientSlug)).limit(1);
+  if (!client) {
+    return { available: false, reason: "Cliente não encontrado.", missing: [] };
+  }
+  if (filters.campaignIds.length === 0) return { available: true, leads: [] };
+
+  const rows = await db
+    .select()
+    .from(metaLeads)
+    .where(
+      and(
+        eq(metaLeads.clientId, client.id),
+        inArray(metaLeads.campaignId, filters.campaignIds),
+        gte(metaLeads.leadDateLocal, filters.since),
+        lte(metaLeads.leadDateLocal, filters.until)
+      )
+    );
+
+  const [campaignsMeta, adsetsMeta, adsMeta] = await Promise.all([
+    db.select({ externalId: metaCampaigns.externalId, name: metaCampaigns.name }).from(metaCampaigns).where(eq(metaCampaigns.clientId, client.id)),
+    db.select({ externalId: metaAdsets.externalId, name: metaAdsets.name }).from(metaAdsets).where(eq(metaAdsets.clientId, client.id)),
+    db.select({ externalId: metaAds.externalId, name: metaAds.name }).from(metaAds).where(eq(metaAds.clientId, client.id)),
+  ]);
+  const campaignNameById = new Map(campaignsMeta.map((c) => [c.externalId, c.name]));
+  const adsetNameById = new Map(adsetsMeta.map((a) => [a.externalId, a.name]));
+  const adNameById = new Map(adsMeta.map((a) => [a.externalId, a.name]));
+
+  const leads: LeadRecord[] = rows.map((r) => {
+    const fieldData = (r.fieldData as { name: string; values?: string[] }[] | null) ?? [];
+    const customFields: Record<string, string> = {};
+    for (const f of fieldData) {
+      if (STANDARD_FIELD_NAMES.has(f.name)) continue;
+      customFields[f.name] = f.values?.[0] ?? "";
+    }
+    return {
+      capturedAt: r.createdTime.toISOString(),
+      name: r.name ?? "",
+      phone: r.phone ?? "",
+      email: r.email,
+      campaignId: r.campaignId ?? "",
+      campaignName: (r.campaignId && campaignNameById.get(r.campaignId)) || r.campaignId || "—",
+      adsetName: (r.adsetId && adsetNameById.get(r.adsetId)) || r.adsetId || null,
+      adName: (r.adId && adNameById.get(r.adId)) || r.adId || null,
+      formName: r.formName,
+      customFields,
+    };
+  });
+
+  return { available: true, leads };
 }
