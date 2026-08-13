@@ -10,9 +10,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Menu, ArrowLeftRight, Download, ChevronDown, X } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Footer } from "@/components/layout/Footer";
+import type { ComparisonResult } from "@/lib/reports/comparison";
 import {
   ResponsiveContainer,
   BarChart,
@@ -28,6 +29,8 @@ import {
 } from "recharts";
 
 const PALETTE = ["#2a78d6", "#eb6834", "#16a34a", "#a855f7", "#eab308", "#ec4899", "#06b6d4", "#f97316"];
+const COMPARE_COLOR_A = "#2a78d6";
+const COMPARE_COLOR_B = "#eb6834";
 
 const PERIOD_OPTIONS: { value: string; label: string }[] = [
   { value: "today", label: "Hoje" },
@@ -219,6 +222,25 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [comparePickerOpen, setComparePickerOpen] = useState(false);
+  const [compareIds, setCompareIds] = useState<{ a: string; b: string } | null>(null);
+  const [compareData, setCompareData] = useState<ComparisonResult | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
+
+  // Query string do período ativo — reaproveitada por comparação e exportação
+  // (PDF), pra nunca divergir do que está selecionado no dashboard (item 7).
+  const periodQuery = useCallback(() => {
+    const qs = new URLSearchParams();
+    qs.set("period", period);
+    if (period === "custom") {
+      qs.set("from", customFrom);
+      qs.set("to", customTo);
+    }
+    return qs;
+  }, [period, customFrom, customTo]);
+
   const dateError = period === "custom" && customFrom && customTo && customFrom > customTo;
   const canFetch = period !== "custom" || (customFrom && customTo && !dateError);
 
@@ -276,6 +298,52 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, customFrom, customTo, campaignId, adsetId, adId, client, canFetch]);
+
+  // Comparação usa sempre o MESMO período ativo do dashboard (item 7) — por
+  // isso reage a period/customFrom/customTo, não só à escolha de A/B.
+  useEffect(() => {
+    if (!compareIds || !canFetch) return;
+    const controller = new AbortController();
+
+    async function run() {
+      if (!compareIds) return;
+      setCompareLoading(true);
+      setCompareError(null);
+      const qs = periodQuery();
+      qs.set("campaignIdA", compareIds.a);
+      qs.set("campaignIdB", compareIds.b);
+      try {
+        const res = await fetch(`/api/reports/${client}/compare?${qs.toString()}`, { signal: controller.signal });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || `Erro HTTP ${res.status}`);
+        setCompareData(json as ComparisonResult);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setCompareError(err instanceof Error ? err.message : "Erro ao comparar campanhas.");
+      } finally {
+        setCompareLoading(false);
+      }
+    }
+
+    run();
+    return () => controller.abort();
+  }, [compareIds, client, canFetch, periodQuery]);
+
+  const exportPdfHref = useCallback(
+    (scope: "current" | "compare") => {
+      const qs = periodQuery();
+      if (scope === "compare" && compareIds) {
+        qs.set("campaignIdA", compareIds.a);
+        qs.set("campaignIdB", compareIds.b);
+      } else {
+        if (campaignId !== "all") qs.set("campaignId", campaignId);
+        if (adsetId !== "all") qs.set("adsetId", adsetId);
+        if (adId !== "all") qs.set("adId", adId);
+      }
+      return `/api/reports/${client}/pdf?${qs.toString()}`;
+    },
+    [periodQuery, compareIds, campaignId, adsetId, adId, client]
+  );
 
   // Trocar campanha reseta conjunto/anúncio (dependência em cascata)
   const handleCampaignChange = (value: string) => {
@@ -413,6 +481,47 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
             onChange={setAdId}
             options={[{ value: "all", label: "Todos os anúncios" }, ...ads.map((a) => ({ value: a.id, label: a.name }))]}
           />
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setComparePickerOpen(true)}
+              disabled={allCampaigns.length < 2}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" />
+              Comparar campanhas
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setExportMenuOpen((v) => !v)}
+                aria-expanded={exportMenuOpen}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Exportar
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              {exportMenuOpen ? (
+                <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border border-white/10 bg-zinc-900 p-1.5 text-sm shadow-xl">
+                  <a
+                    href={exportPdfHref(compareData ? "compare" : "current")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setExportMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-zinc-200 hover:bg-white/5"
+                  >
+                    Gerar relatório PDF
+                  </a>
+                  <span className="mt-1 block rounded-lg px-3 py-2 text-xs text-zinc-600">
+                    Exportar leads (Excel/CSV) — em implantação
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </section>
 
         {data?.period.clampedToEarliest ? (
@@ -594,6 +703,32 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
           period={period}
           customFrom={customFrom}
           customTo={customTo}
+        />
+      ) : null}
+
+      {comparePickerOpen ? (
+        <ComparePickerModal
+          campaigns={allCampaigns}
+          onClose={() => setComparePickerOpen(false)}
+          onConfirm={(a, b) => {
+            setCompareData(null);
+            setCompareIds({ a, b });
+            setComparePickerOpen(false);
+          }}
+        />
+      ) : null}
+
+      {compareIds ? (
+        <CampaignComparisonPanel
+          loading={compareLoading}
+          error={compareError}
+          data={compareData}
+          onClose={() => {
+            setCompareIds(null);
+            setCompareData(null);
+            setCompareError(null);
+          }}
+          exportPdfHref={exportPdfHref("compare")}
         />
       ) : null}
     </div>
@@ -909,6 +1044,316 @@ function AdDetailModal({
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ComparePickerModal({
+  campaigns,
+  onClose,
+  onConfirm,
+}: {
+  campaigns: { id: string; name: string; status: string | null }[];
+  onClose: () => void;
+  onConfirm: (a: string, b: string) => void;
+}) {
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  const canConfirm = a && b && a !== b;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold">Comparar campanhas</h3>
+            <p className="mt-1 text-xs text-zinc-500">Selecione exatamente duas campanhas reais desta conta.</p>
+          </div>
+          <button onClick={onClose} aria-label="Fechar" className="rounded-full border border-white/10 p-1.5 text-zinc-400 hover:bg-white/5">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-zinc-500">Campanha A</label>
+            <select
+              value={a}
+              onChange={(e) => setA(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+            >
+              <option value="">Selecione…</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id} disabled={c.id === b}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-500">Campanha B</label>
+            <select
+              value={b}
+              onChange={(e) => setB(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+            >
+              <option value="">Selecione…</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id} disabled={c.id === a}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5">
+            Cancelar
+          </button>
+          <button
+            onClick={() => canConfirm && onConfirm(a, b)}
+            disabled={!canConfirm}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Comparar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const COMPARE_BAR_METRICS: { key: "leads" | "cpl" | "spend" | "ctrLink"; label: string; format: "integer" | "currency" | "percent" }[] = [
+  { key: "leads", label: "Leads", format: "integer" },
+  { key: "cpl", label: "CPL", format: "currency" },
+  { key: "spend", label: "Investimento", format: "currency" },
+  { key: "ctrLink", label: "CTR Link", format: "percent" },
+];
+
+const COMPARE_TREND_METRICS = ["leads", "cpl", "spend", "ctrLink"] as const;
+type CompareTrendMetric = (typeof COMPARE_TREND_METRICS)[number];
+const COMPARE_TREND_LABEL: Record<CompareTrendMetric, string> = { leads: "Leads", cpl: "CPL", spend: "Investimento", ctrLink: "CTR Link" };
+
+function formatByKind(value: number, format: "currency" | "integer" | "percent" | "decimal") {
+  if (format === "currency") return currency(value);
+  if (format === "percent") return percent(value);
+  if (format === "decimal") return value.toFixed(2);
+  return integer(value);
+}
+
+function CampaignComparisonPanel({
+  loading,
+  error,
+  data,
+  onClose,
+  exportPdfHref,
+}: {
+  loading: boolean;
+  error: string | null;
+  data: ComparisonResult | null;
+  onClose: () => void;
+  exportPdfHref: string;
+}) {
+  const [trendMetric, setTrendMetric] = useState<CompareTrendMetric>("leads");
+
+  const barData = useMemo(() => {
+    if (!data) return [];
+    return COMPARE_BAR_METRICS.map((m) => ({
+      metric: m.label,
+      format: m.format,
+      a: data.a.metrics[m.key],
+      b: data.b.metrics[m.key],
+    }));
+  }, [data]);
+
+  const trendChartData = useMemo(() => {
+    if (!data) return [];
+    const dates = Array.from(new Set([...data.a.trend.map((p) => p.date), ...data.b.trend.map((p) => p.date)])).sort();
+    return dates.map((date) => {
+      const pa = data.a.trend.find((p) => p.date === date);
+      const pb = data.b.trend.find((p) => p.date === date);
+      return {
+        date: shortDate(date),
+        a: pa ? pa[trendMetric] : null,
+        b: pb ? pb[trendMetric] : null,
+      };
+    });
+  }, [data, trendMetric]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h3 className="text-lg font-bold">Comparativo de campanhas</h3>
+          <div className="flex items-center gap-2">
+            {data ? (
+              <a
+                href={exportPdfHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/5"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Exportar PDF
+              </a>
+            ) : null}
+            <button onClick={onClose} aria-label="Fechar" className="rounded-full border border-white/10 p-1.5 text-zinc-400 hover:bg-white/5">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="mt-6 space-y-3">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-48" />
+          </div>
+        ) : error ? (
+          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+        ) : data ? (
+          <>
+            {/* Campanha A VS Campanha B */}
+            <div className="mt-5 grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+              <div className="rounded-2xl border p-4" style={{ borderColor: COMPARE_COLOR_A + "55", backgroundColor: COMPARE_COLOR_A + "14" }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Campanha A</p>
+                <p className="mt-1 text-base font-bold text-white">{data.a.name}</p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {data.a.activeDays} dia{data.a.activeDays === 1 ? "" : "s"} ativo{data.a.activeDays === 1 ? "" : "s"} no período
+                </p>
+              </div>
+              <p className="justify-self-center text-sm font-bold text-zinc-500">VS</p>
+              <div className="rounded-2xl border p-4" style={{ borderColor: COMPARE_COLOR_B + "55", backgroundColor: COMPARE_COLOR_B + "14" }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Campanha B</p>
+                <p className="mt-1 text-base font-bold text-white">{data.b.name}</p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {data.b.activeDays} dia{data.b.activeDays === 1 ? "" : "s"} ativo{data.b.activeDays === 1 ? "" : "s"} no período
+                </p>
+              </div>
+            </div>
+
+            {/* Tabela/matriz — desktop */}
+            <div className="mt-5 hidden overflow-hidden rounded-2xl border border-white/10 sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-white/5 text-left text-[11px] uppercase tracking-wide text-zinc-500">
+                    <th className="px-4 py-2.5 font-semibold">Métrica</th>
+                    <th className="px-4 py-2.5 font-semibold">{data.a.name}</th>
+                    <th className="px-4 py-2.5 font-semibold">{data.b.name}</th>
+                    <th className="px-4 py-2.5 font-semibold">Diferença (B vs A)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.diffs.map((d) => (
+                    <tr key={d.key} className="border-t border-white/10">
+                      <td className="px-4 py-2.5 text-zinc-300">{d.label}</td>
+                      <td className="px-4 py-2.5 font-medium text-white">{formatByKind(d.a, d.format)}</td>
+                      <td className="px-4 py-2.5 font-medium text-white">{formatByKind(d.b, d.format)}</td>
+                      <td className="px-4 py-2.5 text-zinc-400">{d.diffPct === null ? "—" : `${d.diffPct > 0 ? "+" : ""}${d.diffPct.toFixed(1)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cards empilhados — mobile (evita tabela horizontal ilegível) */}
+            <div className="mt-5 space-y-2 sm:hidden">
+              {data.diffs.map((d) => (
+                <div key={d.key} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                  <p className="text-xs font-semibold text-zinc-400">{d.label}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] text-zinc-500">{data.a.name}</p>
+                      <p className="text-sm font-semibold text-white">{formatByKind(d.a, d.format)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-zinc-500">{data.b.name}</p>
+                      <p className="text-sm font-semibold text-white">{formatByKind(d.b, d.format)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-zinc-500">
+                    Diferença (B vs A): {d.diffPct === null ? "—" : `${d.diffPct > 0 ? "+" : ""}${d.diffPct.toFixed(1)}%`}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Gráfico de barras — KPIs principais */}
+            <h4 className="mt-6 text-sm font-semibold">KPIs principais</h4>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {barData.map((row) => (
+                <div key={row.metric} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                  <p className="mb-2 text-xs font-medium text-zinc-400">{row.metric}</p>
+                  <div className="h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[{ name: row.metric, a: row.a, b: row.b }]} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" hide />
+                        <Tooltip
+                          contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                          formatter={(v) => formatByKind(Number(v) || 0, row.format)}
+                        />
+                        <Bar dataKey="a" name={data.a.name} fill={COMPARE_COLOR_A} radius={[4, 4, 4, 4]} barSize={16} />
+                        <Bar dataKey="b" name={data.b.name} fill={COMPARE_COLOR_B} radius={[4, 4, 4, 4]} barSize={16} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Evolução diária — Leads/CPL/Investimento/CTR */}
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold">Evolução diária</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {COMPARE_TREND_METRICS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setTrendMetric(m)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${trendMetric === m ? "bg-white text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
+                  >
+                    {COMPARE_TREND_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 h-64 rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              {trendChartData.length === 0 ? (
+                <p className="flex h-full items-center justify-center text-xs text-zinc-500">Sem entrega registrada nesse período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" vertical={false} />
+                    <XAxis dataKey="date" stroke="#71717a" fontSize={11} tickLine={false} axisLine={{ stroke: "#3f3f46" }} />
+                    <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="a" name={data.a.name} stroke={COMPARE_COLOR_A} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    <Line type="monotone" dataKey="b" name={data.b.name} stroke={COMPARE_COLOR_B} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Diagnóstico comparativo */}
+            <h4 className="mt-6 text-sm font-semibold">Diagnóstico comparativo</h4>
+            <div className="mt-3 space-y-2">
+              {data.diagnostics.map((d, i) => (
+                <p key={i} className="rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-300">
+                  {d}
+                </p>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
