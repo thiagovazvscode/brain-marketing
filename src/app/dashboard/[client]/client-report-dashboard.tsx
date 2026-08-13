@@ -226,6 +226,7 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [leadsModalFormat, setLeadsModalFormat] = useState<"xlsx" | "csv" | null>(null);
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<{ a: string; b: string } | null>(null);
   const [compareData, setCompareData] = useState<ComparisonResult | null>(null);
@@ -520,9 +521,26 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
                   >
                     Gerar relatório PDF
                   </button>
-                  <span className="mt-1 block rounded-lg px-3 py-2 text-xs text-zinc-600">
-                    Exportar leads (Excel/CSV) — em implantação
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      setLeadsModalFormat("xlsx");
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-200 hover:bg-white/5"
+                  >
+                    Exportar leads — Excel (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      setLeadsModalFormat("csv");
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-200 hover:bg-white/5"
+                  >
+                    Exportar leads — CSV (.csv)
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -749,6 +767,18 @@ export function ClientReportDashboard({ client, displayName }: { client: string;
             window.open(buildPdfHref(scope), "_blank", "noopener,noreferrer");
             setExportModalOpen(false);
           }}
+        />
+      ) : null}
+
+      {leadsModalFormat ? (
+        <ExportLeadsModal
+          client={client}
+          format={leadsModalFormat}
+          campaigns={allCampaigns}
+          defaultCampaignId={campaignId}
+          defaultSince={data?.period.since ?? null}
+          defaultUntil={data?.period.until ?? null}
+          onClose={() => setLeadsModalFormat(null)}
         />
       ) : null}
     </div>
@@ -1237,6 +1267,238 @@ function ExportPdfModal({
             className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
           >
             Gerar PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type LeadsPreview = { perCampaign: { id: string; name: string; leads: number }[]; totalLeads: number };
+type LeadsBlockedInfo = { reason: string; missing: string[] };
+
+function ExportLeadsModal({
+  client,
+  format,
+  campaigns,
+  defaultCampaignId,
+  defaultSince,
+  defaultUntil,
+  onClose,
+}: {
+  client: string;
+  format: "xlsx" | "csv";
+  campaigns: { id: string; name: string; status: string | null }[];
+  defaultCampaignId: string;
+  defaultSince: string | null;
+  defaultUntil: string | null;
+  onClose: () => void;
+}) {
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(defaultCampaignId !== "all" ? [defaultCampaignId] : [])
+  );
+  const [since, setSince] = useState(defaultSince ?? todayIso);
+  const [until, setUntil] = useState(defaultUntil ?? todayIso);
+  const [csvVariant, setCsvVariant] = useState<"completa" | "mailing">("completa");
+  const [preview, setPreview] = useState<LeadsPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [blocked, setBlocked] = useState<LeadsBlockedInfo | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const allSelected = campaigns.length > 0 && selectedIds.size === campaigns.length;
+
+  function toggleCampaign(id: string) {
+    setBlocked(null);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setBlocked(null);
+    setSelectedIds(allSelected ? new Set() : new Set(campaigns.map((c) => c.id)));
+  }
+
+  // Sem seleção/período válido não há o que buscar — em vez de zerar
+  // `preview` sincronamente dentro do efeito (dispara o lint
+  // react-hooks/set-state-in-effect e cascateia um render extra à toa), o
+  // valor exibido é derivado na hora de renderizar (effectivePreview).
+  const hasQuery = selectedIds.size > 0 && Boolean(since) && Boolean(until);
+
+  useEffect(() => {
+    if (!hasQuery) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const qs = new URLSearchParams({ format: "preview", since, until, campaignIds: Array.from(selectedIds).join(",") });
+        const res = await fetch(`/api/reports/${client}/leads?${qs}`, { signal: controller.signal });
+        if (res.ok) setPreview(await res.json());
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) setPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [client, hasQuery, selectedIds, since, until]);
+
+  const effectivePreview = hasQuery ? preview : null;
+
+  async function handleExport() {
+    setExporting(true);
+    setBlocked(null);
+    try {
+      const qs = new URLSearchParams({ format, since, until, campaignIds: Array.from(selectedIds).join(",") });
+      if (format === "csv") qs.set("variant", csvVariant);
+      const res = await fetch(`/api/reports/${client}/leads?${qs}`);
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        setBlocked({ reason: json?.error ?? "Não foi possível exportar agora.", missing: json?.missing ?? [] });
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `leads.${format}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onClose();
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-white/10 bg-zinc-950 p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h3 className="text-lg font-bold">Exportar leads — {format === "xlsx" ? "Excel" : "CSV"}</h3>
+          <button onClick={onClose} aria-label="Fechar" className="rounded-full border border-white/10 p-1.5 text-zinc-400 hover:bg-white/5">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-zinc-500">Data inicial</label>
+              <input
+                type="date"
+                value={since}
+                max={until}
+                onChange={(e) => {
+                  setBlocked(null);
+                  setSince(e.target.value);
+                }}
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-zinc-500">Data final</label>
+              <input
+                type="date"
+                value={until}
+                min={since}
+                onChange={(e) => {
+                  setBlocked(null);
+                  setUntil(e.target.value);
+                }}
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              />
+            </div>
+          </div>
+
+          {format === "csv" ? (
+            <div>
+              <label className="text-xs font-medium text-zinc-500">Conteúdo do CSV</label>
+              <select
+                value={csvVariant}
+                onChange={(e) => setCsvVariant(e.target.value as "completa" | "mailing")}
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              >
+                <option value="completa">Base completa</option>
+                <option value="mailing">Mailing consolidado</option>
+              </select>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-zinc-500">Campanhas</label>
+              <button onClick={toggleAll} className="text-xs font-medium text-zinc-400 hover:text-white">
+                {allSelected ? "Limpar seleção" : "Selecionar todas"}
+              </button>
+            </div>
+            <div className="mt-1.5 max-h-52 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/40 p-2">
+              {campaigns.length === 0 ? (
+                <p className="px-2 py-3 text-center text-xs text-zinc-500">Nenhuma campanha com dados no período atual.</p>
+              ) : (
+                campaigns.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/5">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleCampaign(c.id)}
+                      className="h-3.5 w-3.5 rounded border-white/20 bg-black/40 accent-brand-primary"
+                    />
+                    <span className="truncate">{c.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400">
+            {selectedIds.size} campanha{selectedIds.size === 1 ? "" : "s"} selecionada{selectedIds.size === 1 ? "" : "s"}
+            {selectedIds.size > 0 ? (
+              <>
+                {" · "}
+                {previewLoading
+                  ? "calculando…"
+                  : `${effectivePreview?.totalLeads ?? 0} lead${(effectivePreview?.totalLeads ?? 0) === 1 ? "" : "s"} encontrado${(effectivePreview?.totalLeads ?? 0) === 1 ? "" : "s"}`}
+              </>
+            ) : null}
+          </div>
+
+          {blocked ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              <p className="font-semibold">{blocked.reason}</p>
+              {blocked.missing.length > 0 ? (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-200/80">
+                  {blocked.missing.map((m, i) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-2 text-amber-200/80">O relatório em PDF continua disponível normalmente.</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5">
+            Cancelar
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={selectedIds.size === 0 || exporting}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {exporting ? "Exportando…" : `Exportar ${format.toUpperCase()}`}
           </button>
         </div>
       </div>

@@ -27,3 +27,20 @@ export function buildReportFilename(parts: {
   const middle = scopeB ? `${scope}-vs-${scopeB}` : scope;
   return `brain-${parts.kind}-${slugifyForFilename(parts.clientSlug)}-${middle}-${parts.since}-a-${parts.until}.pdf`;
 }
+
+export function buildLeadsFilename(parts: {
+  clientSlug: string;
+  campaignNames: string[];
+  since: string;
+  until: string;
+  extension: "xlsx" | "csv";
+}) {
+  // Uma campanha: usa o nome dela no arquivo (mesmo padrão do PDF). Duas ou
+  // mais: "N-campanhas" — o nome de N campanhas concatenadas viraria um
+  // arquivo ilegível.
+  const scope =
+    parts.campaignNames.length === 1
+      ? slugifyForFilename(parts.campaignNames[0])
+      : `${parts.campaignNames.length}-campanhas`;
+  return `brain-${slugifyForFilename(parts.clientSlug)}-${scope}-${parts.since}-a-${parts.until}.${parts.extension}`;
+}
