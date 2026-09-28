@@ -1277,7 +1277,14 @@ function ExportPdfModal({
   );
 }
 
-type LeadsPreview = { since: string; until: string; perCampaign: { id: string; name: string; leads: number }[]; totalLeads: number };
+type LeadsIncomeOption = { value: string; label: string; count: number };
+type LeadsPreview = {
+  since: string;
+  until: string;
+  perCampaign: { id: string; name: string; leads: number }[];
+  totalLeads: number;
+  incomeOptions: LeadsIncomeOption[];
+};
 // Só a mensagem — nunca detalhe técnico de infraestrutura (item 4 do pedido:
 // "o cliente não deve ver detalhes de infraestrutura").
 type LeadsBlockedInfo = { reason: string };
@@ -1337,6 +1344,9 @@ function ExportLeadsModal({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [blocked, setBlocked] = useState<LeadsBlockedInfo | null>(null);
   const [exporting, setExporting] = useState(false);
+  // null = sem filtro (todas as faixas entram) — só vira um Set explícito
+  // quando a pessoa desmarca alguma faixa; ver toggleIncome.
+  const [incomeFilter, setIncomeFilter] = useState<Set<string> | null>(null);
 
   const allSelected = campaigns.length > 0 && selectedIds.size === campaigns.length;
   const dateError = periodPreset === "custom" && customFrom && customTo && customFrom > customTo;
@@ -1356,12 +1366,24 @@ function ExportLeadsModal({
     setSelectedIds(allSelected ? new Set() : new Set(campaigns.map((c) => c.id)));
   }
 
+  function toggleIncome(value: string, allValues: string[]) {
+    setBlocked(null);
+    setIncomeFilter((prev) => {
+      const base = prev ?? new Set(allValues);
+      const next = new Set(base);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
   function buildPeriodQuery() {
     const qs = new URLSearchParams({ period: periodPreset });
     if (periodPreset === "custom") {
       qs.set("from", customFrom);
       qs.set("to", customTo);
     }
+    if (incomeFilter) qs.set("incomeValues", Array.from(incomeFilter).join(","));
     return qs;
   }
 
@@ -1393,7 +1415,7 @@ function ExportLeadsModal({
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, hasQuery, selectedIds, periodPreset, customFrom, customTo]);
+  }, [client, hasQuery, selectedIds, periodPreset, customFrom, customTo, incomeFilter]);
 
   const effectivePreview = hasQuery ? preview : null;
 
@@ -1540,6 +1562,42 @@ function ExportLeadsModal({
               )}
             </div>
           </div>
+
+          {effectivePreview && effectivePreview.incomeOptions.length > 0 ? (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-500">Faixa de renda</label>
+                {incomeFilter ? (
+                  <button onClick={() => setIncomeFilter(null)} className="text-xs font-medium text-zinc-400 hover:text-white">
+                    Limpar filtro
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-1.5 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/40 p-2">
+                {effectivePreview.incomeOptions.map((opt) => {
+                  const checked = incomeFilter ? incomeFilter.has(opt.value) : true;
+                  const allValues = effectivePreview.incomeOptions.map((o) => o.value);
+                  return (
+                    <label
+                      key={opt.value}
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/5"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIncome(opt.value, allValues)}
+                          className="h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-black/40 accent-brand-primary"
+                        />
+                        <span className="truncate">{opt.label}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-zinc-500">{opt.count}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400">
             {selectedIds.size} campanha{selectedIds.size === 1 ? "" : "s"} selecionada{selectedIds.size === 1 ? "" : "s"}

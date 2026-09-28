@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { getCampaignLeadsPreview } from "@/lib/reports/leads-preview";
-import { getLeadsForClient } from "@/lib/leads/source";
+import { getLeadsForClient, getIncomeOptions } from "@/lib/leads/source";
 import { buildLeadsWorkbook } from "@/lib/leads/workbook";
 import { buildLeadsCsv } from "@/lib/leads/csv";
 import { buildLeadsFilename } from "@/lib/reports/filename";
@@ -54,6 +54,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
     .filter(Boolean);
   const variant = searchParams.get("variant") === "mailing" ? "mailing" : "completa";
 
+  // Valores brutos de faixa de renda (ex.: "r$2.000_a_3.000_") vindos do
+  // checkbox de filtro no modal — mesmo formato salvo em field_data, nunca
+  // reclassificado numericamente (ver src/lib/leads/source.ts).
+  const incomeValues = (searchParams.get("incomeValues") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   if (campaignIds.length === 0) return jsonError("Selecione ao menos uma campanha.", 400);
 
   try {
@@ -65,7 +73,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
     const { since, until } = preview;
 
     if (format === "preview") {
-      return NextResponse.json(preview, { headers: { "Cache-Control": "no-store" } });
+      // Opções de renda sempre vêm do conjunto SEM filtro (senão uma faixa
+      // desmarcada some da lista) — mas "N leads encontrados" precisa
+      // refletir o filtro pra bater 1:1 com o que a exportação vai entregar.
+      const fullAvailability = await getLeadsForClient(client, { campaignIds, since, until });
+      if (!fullAvailability.available) {
+        console.error(`[leads-export] preview indisponível pra ${client}: ${fullAvailability.reason}`, fullAvailability.missing);
+        return jsonError(GENERIC_FAILURE_MESSAGE, 503);
+      }
+      const incomeOptions = getIncomeOptions(fullAvailability.leads);
+      let totalLeads = fullAvailability.leads.length;
+      if (incomeValues.length > 0) {
+        const filteredAvailability = await getLeadsForClient(client, { campaignIds, since, until, incomeValues });
+        totalLeads = filteredAvailability.available ? filteredAvailability.leads.length : 0;
+      }
+
+      return NextResponse.json(
+        { since: preview.since, until: preview.until, perCampaign: preview.perCampaign, totalLeads, incomeOptions },
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     if (format !== "xlsx" && format !== "csv") return jsonError("Formato inválido.", 400);
@@ -73,7 +99,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
     const [clientRow] = await db.select({ name: clients.name }).from(clients).where(eq(clients.slug, client)).limit(1);
     if (!clientRow) return jsonError("Cliente não encontrado.", 404);
 
-    const availability = await getLeadsForClient(client, { campaignIds, since, until });
+    const availability = await getLeadsForClient(client, { campaignIds, since, until, incomeValues });
     if (!availability.available) {
       // Detalhe técnico só no log do servidor — o cliente nunca vê isso
       // (item 4 do pedido: "cliente não deve ver detalhes de infraestrutura").
